@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "build": "vite build && python3 scripts/build_apk.py",
-    "build:apk": "python3 scripts/build_apk.py",
+    "build": "vite build",
+    "build:apk": "./scripts/build_native_apk.sh",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
