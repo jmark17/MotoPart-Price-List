@@ -39,7 +39,7 @@ export const PartsTable: React.FC<PartsTableProps> = ({
         {parts.map((part) => {
           const margin = part.srpPrice - part.shopPrice;
           const marginPercent =
-            part.srpPrice > 0 ? ((margin / part.srpPrice) * 100).toFixed(0) : '0';
+            part.shopPrice > 0 ? ((margin / part.shopPrice) * 100).toFixed(0) : '0';
 
           return (
             <div
@@ -61,11 +61,11 @@ export const PartsTable: React.FC<PartsTableProps> = ({
                 <div className="text-right shrink-0">
                   <div className="text-sm font-extrabold text-amber-400">
                     {formatPHP(part.srpPrice)}{' '}
-                    <span className="text-[10px] text-amber-500/80 font-semibold uppercase">SRP</span>
+                    <span className="text-[10px] text-amber-500/90 font-bold uppercase">Dealer (SRP)</span>
                   </div>
                   <div className="text-xs font-bold text-emerald-400">
                     {formatPHP(part.shopPrice)}{' '}
-                    <span className="text-[9px] text-emerald-500/80 font-semibold uppercase">Shop</span>
+                    <span className="text-[9px] text-emerald-500/90 font-bold uppercase">Shop Price</span>
                   </div>
                 </div>
               </div>
@@ -75,12 +75,12 @@ export const PartsTable: React.FC<PartsTableProps> = ({
                 {part.itemName}
               </div>
 
-              {/* Bottom Row: Profit margin info & Actions */}
+              {/* Bottom Row: Shop Price Margin info & Actions */}
               <div className="flex items-center justify-between pt-1.5 border-t border-slate-800/50 mt-0.5">
                 <div>
                   {margin > 0 ? (
                     <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/30">
-                      +{formatPHP(margin)} ({marginPercent}%) Margin
+                      +{formatPHP(margin)} ({marginPercent}%) Shop Price Margin
                     </span>
                   ) : (
                     <span className="text-[11px] text-slate-500 font-medium">Standard</span>
@@ -138,8 +138,8 @@ export const PartsTable: React.FC<PartsTableProps> = ({
               <th className="py-3.5 px-4 sm:px-6">Part #</th>
               <th className="py-3.5 px-4">Item Name</th>
               <th className="py-3.5 px-4">Brand</th>
-              <th className="py-3.5 px-4 text-right">Shop Price (PHP)</th>
-              <th className="py-3.5 px-4 text-right">SRP Price (PHP)</th>
+              <th className="py-3.5 px-4 text-right">Shop Price</th>
+              <th className="py-3.5 px-4 text-right">SRP Price (Dealer)</th>
               <th className="py-3.5 px-4 text-center">Actions</th>
             </tr>
           </thead>
@@ -147,7 +147,7 @@ export const PartsTable: React.FC<PartsTableProps> = ({
             {parts.map((part) => {
               const margin = part.srpPrice - part.shopPrice;
               const marginPercent =
-                part.srpPrice > 0 ? ((margin / part.srpPrice) * 100).toFixed(0) : '0';
+                part.shopPrice > 0 ? ((margin / part.shopPrice) * 100).toFixed(0) : '0';
 
               return (
                 <tr
@@ -180,17 +180,17 @@ export const PartsTable: React.FC<PartsTableProps> = ({
                     <div className="text-sm font-bold text-emerald-400">
                       {formatPHP(part.shopPrice)}
                     </div>
-                    <div className="text-[10px] text-slate-400">Shop Wholesale</div>
+                    <div className="text-[10px] text-slate-400">Shop Price</div>
                   </td>
 
-                  {/* SRP Price */}
+                  {/* SRP Price (Dealer) */}
                   <td className="py-3.5 px-4 text-right whitespace-nowrap">
                     <div className="text-base font-extrabold text-amber-400">
                       {formatPHP(part.srpPrice)}
                     </div>
                     {margin > 0 && (
                       <div className="text-[10px] font-semibold text-emerald-400">
-                        +{formatPHP(margin)} ({marginPercent}%)
+                        +{formatPHP(margin)} ({marginPercent}%) Shop Price Margin
                       </div>
                     )}
                   </td>

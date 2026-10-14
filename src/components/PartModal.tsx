@@ -87,7 +87,7 @@ export const PartModal: React.FC<PartModalProps> = ({
   const srp = Number(formData.srpPrice) || 0;
   const shop = Number(formData.shopPrice) || 0;
   const margin = srp - shop;
-  const marginPercent = srp > 0 ? ((margin / srp) * 100).toFixed(1) : '0';
+  const marginPercent = shop > 0 ? ((margin / shop) * 100).toFixed(1) : '0';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
@@ -183,10 +183,10 @@ export const PartModal: React.FC<PartModalProps> = ({
 
           {/* Pricing in PHP ₱ */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            {/* SRP Price */}
+            {/* SRP Price (Dealer) */}
             <div>
               <label className="block text-[11px] font-semibold text-amber-400 uppercase tracking-wider mb-1">
-                SRP Price (PHP) *
+                SRP Price (Dealer) *
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-amber-400/90 text-sm font-bold">
@@ -209,7 +209,7 @@ export const PartModal: React.FC<PartModalProps> = ({
                   } rounded-xl text-base sm:text-sm text-amber-300 font-bold outline-none focus:border-amber-500`}
                 />
               </div>
-              <p className="text-[10px] text-slate-500 mt-0.5">Suggested Retail Price</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Dealer Selling / Retail Price</p>
               {errors.srpPrice && (
                 <p className="text-xs text-red-400 mt-1">{errors.srpPrice}</p>
               )}
@@ -241,17 +241,20 @@ export const PartModal: React.FC<PartModalProps> = ({
                   } rounded-xl text-base sm:text-sm text-emerald-300 font-bold outline-none focus:border-emerald-500`}
                 />
               </div>
-              <p className="text-[10px] text-slate-500 mt-0.5">Wholesale / Dealer Cost</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Shop Price (Wholesale Cost)</p>
               {errors.shopPrice && (
                 <p className="text-xs text-red-400 mt-1">{errors.shopPrice}</p>
               )}
             </div>
           </div>
 
-          {/* Live Profit Margin Preview */}
+          {/* Live Shop Price Margin Preview */}
           <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
-            <span className="text-slate-400 font-medium">Dealer Profit Margin:</span>
-            <span className="font-bold text-emerald-400">
+            <div>
+              <span className="text-slate-300 font-semibold block">Shop Price Margin:</span>
+              <span className="text-[10px] text-slate-500">SRP - Shop Price</span>
+            </div>
+            <span className="font-bold text-emerald-400 text-sm sm:text-base">
               +{formatPHP(margin)} ({marginPercent}%)
             </span>
           </div>

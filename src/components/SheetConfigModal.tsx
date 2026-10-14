@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User } from 'firebase/auth';
+import { AppUser } from '../services/auth';
 import {
   X,
   FileSpreadsheet,
@@ -16,7 +17,7 @@ import { SheetSyncStatus } from '../types/motorPart';
 interface SheetConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: User | null;
+  user: User | AppUser | null;
   syncStatus: SheetSyncStatus;
   isLoggingIn: boolean;
   onLogin: () => void;

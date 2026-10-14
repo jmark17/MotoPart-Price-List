@@ -17,6 +17,11 @@ export function extractSpreadsheetId(input: string): string {
   return trimmed;
 }
 
+export function formatA1Range(sheetName: string, cellRange: string = 'A1'): string {
+  const sanitized = sheetName.replace(/'/g, "''");
+  return `'${sanitized}'!${cellRange}`;
+}
+
 export interface SpreadsheetMetadata {
   id: string;
   title: string;
@@ -34,6 +39,15 @@ export async function fetchSpreadsheetMetadata(
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      throw new Error('Google authorization expired (HTTP 401). Please re-authenticate with Google.');
+    }
+    if (res.status === 403) {
+      throw new Error('Permission denied (HTTP 403). Make sure your Google account has access to this spreadsheet.');
+    }
+    if (res.status === 404) {
+      throw new Error('Spreadsheet not found (HTTP 404). Verify the Sheet ID.');
+    }
     throw new Error(
       errorBody.error?.message ||
         `Failed to fetch spreadsheet (HTTP ${res.status}). Verify access permissions and Sheet ID.`
@@ -54,9 +68,9 @@ export async function fetchSpreadsheetMetadata(
 
 export async function createMotorPartsSpreadsheet(
   accessToken: string,
-  title: string = 'Motor Parts Pricelist',
+  title: string = 'Motor Parts Pricelist Database (PHP)',
   initialParts: MotorPart[] = []
-): Promise<{ id: string; url: string; title: string }> {
+): Promise<{ id: string; url: string; title: string; sheetTitle: string }> {
   const sheetTitle = 'Pricelist';
   const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
     method: 'POST',
@@ -83,6 +97,9 @@ export async function createMotorPartsSpreadsheet(
 
   if (!createRes.ok) {
     const errorBody = await createRes.json().catch(() => ({}));
+    if (createRes.status === 401) {
+      throw new Error('Google authorization expired (HTTP 401). Please re-authenticate with Google.');
+    }
     throw new Error(
       errorBody.error?.message || `Failed to create Google Sheet (HTTP ${createRes.status})`
     );
@@ -105,7 +122,7 @@ export async function createMotorPartsSpreadsheet(
 
   await updateSpreadsheetValues(accessToken, spreadsheetId, sheetTitle, rows);
 
-  // Apply styling to header row (slate background, white bold text)
+  // Apply styling to header row (dark navy background, bold white text)
   try {
     await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
       method: 'POST',
@@ -124,7 +141,7 @@ export async function createMotorPartsSpreadsheet(
               },
               cell: {
                 userEnteredFormat: {
-                  backgroundColor: { red: 0.08, green: 0.12, blue: 0.18 }, // dark navy #141f2e
+                  backgroundColor: { red: 0.08, green: 0.12, blue: 0.18 }, // #141f2e
                   textFormat: {
                     foregroundColor: { red: 1.0, green: 1.0, blue: 1.0 },
                     bold: true,
@@ -157,6 +174,7 @@ export async function createMotorPartsSpreadsheet(
     id: spreadsheetId,
     url: spreadsheetUrl,
     title,
+    sheetTitle,
   };
 }
 
@@ -167,22 +185,30 @@ export async function updateSpreadsheetValues(
   rows: (string | number)[][]
 ): Promise<void> {
   // Clear existing cells in sheet first to avoid ghost rows
-  await fetch(
-    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${encodeURIComponent(
-      sheetName
-    )}'!A1:Z5000:clear`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
+  const clearRange = encodeURIComponent(formatA1Range(sheetName, 'A1:Z5000'));
+  try {
+    const clearRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${clearRange}:clear`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    if (!clearRes.ok && clearRes.status === 401) {
+      throw new Error('Google authorization expired (HTTP 401). Please re-authenticate with Google.');
     }
-  );
+  } catch (clearErr: any) {
+    if (clearErr.message?.includes('401')) {
+      throw clearErr;
+    }
+    console.warn('Values clear warning (non-fatal, continuing to write):', clearErr);
+  }
 
-  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${encodeURIComponent(
-    sheetName
-  )}'!A1?valueInputOption=USER_ENTERED`;
+  const updateRange = encodeURIComponent(formatA1Range(sheetName, 'A1'));
+  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${updateRange}?valueInputOption=USER_ENTERED`;
 
   const res = await fetch(updateUrl, {
     method: 'PUT',
@@ -191,7 +217,7 @@ export async function updateSpreadsheetValues(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      range: `'${sheetName}'!A1`,
+      range: formatA1Range(sheetName, 'A1'),
       majorDimension: 'ROWS',
       values: rows,
     }),
@@ -199,6 +225,15 @@ export async function updateSpreadsheetValues(
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      throw new Error('Google authorization expired (HTTP 401). Please re-authenticate with Google.');
+    }
+    if (res.status === 403) {
+      throw new Error('Permission denied (HTTP 403). Make sure your Google account has edit access to this spreadsheet.');
+    }
+    if (res.status === 404) {
+      throw new Error('Spreadsheet not found (HTTP 404). Verify your Google Sheet ID.');
+    }
     throw new Error(
       errorBody.error?.message || `Failed to update spreadsheet values (HTTP ${res.status})`
     );
@@ -210,7 +245,7 @@ export async function syncAllPartsToSheet(
   spreadsheetId: string,
   parts: MotorPart[],
   sheetName?: string
-): Promise<void> {
+): Promise<string> {
   let targetSheet = sheetName;
   if (!targetSheet) {
     try {
@@ -232,7 +267,24 @@ export async function syncAllPartsToSheet(
     ]),
   ];
 
-  await updateSpreadsheetValues(accessToken, spreadsheetId, targetSheet, rows);
+  try {
+    await updateSpreadsheetValues(accessToken, spreadsheetId, targetSheet, rows);
+  } catch (err: any) {
+    // If targetSheet fails with range error or not found, try discovering the sheet from metadata
+    if (!sheetName && (err.message?.includes('Unable to parse') || err.message?.includes('not found') || err.message?.includes('Range'))) {
+      const meta = await fetchSpreadsheetMetadata(accessToken, spreadsheetId);
+      if (meta.sheets[0]?.title && meta.sheets[0].title !== targetSheet) {
+        targetSheet = meta.sheets[0].title;
+        await updateSpreadsheetValues(accessToken, spreadsheetId, targetSheet, rows);
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
+
+  return targetSheet;
 }
 
 export async function readPartsFromSheet(
@@ -246,9 +298,8 @@ export async function readPartsFromSheet(
     targetSheet = meta.sheets[0]?.title || 'Pricelist';
   }
 
-  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/'${encodeURIComponent(
-    targetSheet
-  )}'!A1:Z5000`;
+  const readRange = encodeURIComponent(formatA1Range(targetSheet, 'A1:Z5000'));
+  const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${readRange}`;
 
   const res = await fetch(readUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -256,6 +307,15 @@ export async function readPartsFromSheet(
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      throw new Error('Google authorization expired (HTTP 401). Please re-authenticate with Google.');
+    }
+    if (res.status === 403) {
+      throw new Error('Permission denied (HTTP 403). Make sure your Google account has access to this spreadsheet.');
+    }
+    if (res.status === 404) {
+      throw new Error('Spreadsheet not found (HTTP 404). Verify your Google Sheet ID.');
+    }
     throw new Error(
       errorBody.error?.message || `Failed to read spreadsheet values (HTTP ${res.status})`
     );

@@ -5,6 +5,18 @@
     body {
       background: white !important;
       color: black !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+
+    /* Hide non-printable elements */
+    .print\:hidden {
+      display: none !important;
+    }
+
+    /* Printable containers */
+    .print\:block {
+      display: block !important;
     }
   }
 }

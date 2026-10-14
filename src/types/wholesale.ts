@@ -12,6 +12,31 @@ export interface WholesaleEstimateItem {
   note?: string;
 }
 
+export interface CompletedPurchaseItem {
+  partId: string;
+  partNumber: string;
+  itemName: string;
+  brand: string;
+  quantity: number;
+  unitPrice: number;
+  subtotal: number;
+  srpPrice?: number;
+  shopPriceMargin?: number;
+}
+
+export interface CompletedPurchase {
+  id: string; // e.g. "PUR-20261014-4192"
+  timestamp: string; // ISO String
+  dateFormatted: string; // "Oct 14, 2026"
+  timeFormatted: string; // "12:21 AM"
+  buyerName: string;
+  items: CompletedPurchaseItem[];
+  totalUnits: number;
+  grandTotal: number;
+  totalSrp?: number;
+  shopPriceMargin?: number;
+}
+
 export interface WholesaleExtraFee {
   id: string;
   name: string;

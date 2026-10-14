@@ -5,6 +5,7 @@ import {
   logout,
   getAccessToken,
   setCachedAccessToken,
+  AppUser,
 } from './services/auth';
 import {
   createMotorPartsSpreadsheet,
@@ -23,18 +24,19 @@ import { PartModal } from './components/PartModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SheetConfigModal } from './components/SheetConfigModal';
 import { PrintPricelistModal } from './components/PrintPricelistModal';
-import { WholesaleEstimateModal } from './components/WholesaleEstimateModal';
-import { WholesaleEstimateItem } from './types/wholesale';
+import { WholesaleEstimateModal, STORAGE_PURCHASE_HISTORY_KEY } from './components/WholesaleEstimateModal';
+import { WholesaleEstimateItem, CompletedPurchase } from './types/wholesale';
 import { AuthModal } from './components/AuthModal';
-import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, Calculator, ChevronUp, Check } from 'lucide-react';
+import { formatPHP } from './utils/formatCurrency';
 
 const STORAGE_PARTS_KEY = 'motoparts_items_php_v1';
 const STORAGE_SHEET_ID_KEY = 'motoparts_sheet_id_php_v1';
 const STORAGE_SHEET_TITLE_KEY = 'motoparts_sheet_title_php_v1';
 
 export default function App() {
-  // Firebase Auth user state
-  const [user, setUser] = useState<User | null>(null);
+  // Auth user state
+  const [user, setUser] = useState<User | AppUser | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -141,9 +143,97 @@ export default function App() {
     showToast(`Added "${part.itemName}" to Wholesale Estimate`, 'success');
   };
 
-  const handleClearWholesale = () => {
+  const handleClearWholesale = (skipToast: boolean = false) => {
     setWholesaleItems([]);
-    showToast('Wholesale estimate cleared', 'info');
+    if (!skipToast) {
+      showToast('Wholesale estimate cleared', 'info');
+    }
+  };
+
+  const wholesaleTotalUnits = useMemo(() => {
+    return wholesaleItems.reduce((acc, i) => acc + i.quantity, 0);
+  }, [wholesaleItems]);
+
+  const wholesaleGrandTotal = useMemo(() => {
+    return wholesaleItems.reduce((acc, i) => {
+      const price =
+        i.customWholesalePrice !== undefined && i.customWholesalePrice > 0
+          ? i.customWholesalePrice
+          : i.shopPrice;
+      return acc + price * i.quantity;
+    }, 0);
+  }, [wholesaleItems]);
+
+  const wholesaleTotalSrp = useMemo(() => {
+    return wholesaleItems.reduce((acc, i) => acc + i.srpPrice * i.quantity, 0);
+  }, [wholesaleItems]);
+
+  const wholesaleShopPriceMargin = useMemo(() => {
+    return Math.max(0, wholesaleTotalSrp - wholesaleGrandTotal);
+  }, [wholesaleTotalSrp, wholesaleGrandTotal]);
+
+  // Complete purchase from the floating minimized bar
+  const handleCompleteWholesaleFromBar = () => {
+    if (wholesaleItems.length === 0) return;
+    const now = new Date();
+    const dateFormatted = now.toLocaleDateString('en-PH', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+    const timeFormatted = now.toLocaleTimeString('en-PH', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
+    const rand = Math.floor(1000 + Math.random() * 9000);
+    const purchaseId = `PUR-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${rand}`;
+
+    const completedPurchase: CompletedPurchase = {
+      id: purchaseId,
+      timestamp: now.toISOString(),
+      dateFormatted,
+      timeFormatted,
+      buyerName: 'Walk-in Buyer',
+      items: wholesaleItems.map((i) => {
+        const unitPrice =
+          i.customWholesalePrice !== undefined && i.customWholesalePrice > 0
+            ? i.customWholesalePrice
+            : i.shopPrice;
+        const subtotal = unitPrice * i.quantity;
+        const itemMargin = i.srpPrice * i.quantity - subtotal;
+        return {
+          partId: i.partId,
+          partNumber: i.partNumber,
+          itemName: i.itemName,
+          brand: i.brand,
+          quantity: i.quantity,
+          unitPrice,
+          subtotal,
+          srpPrice: i.srpPrice,
+          shopPriceMargin: itemMargin,
+        };
+      }),
+      totalUnits: wholesaleTotalUnits,
+      grandTotal: wholesaleGrandTotal,
+      totalSrp: wholesaleTotalSrp,
+      shopPriceMargin: wholesaleShopPriceMargin,
+    };
+
+    try {
+      const stored = localStorage.getItem(STORAGE_PURCHASE_HISTORY_KEY);
+      const existing: CompletedPurchase[] = stored ? JSON.parse(stored) : [];
+      localStorage.setItem(
+        STORAGE_PURCHASE_HISTORY_KEY,
+        JSON.stringify([completedPurchase, ...existing])
+      );
+    } catch (e) {
+      console.warn('Failed to save purchase history', e);
+    }
+
+    setWholesaleItems([]);
+    showToast(`Purchase ${purchaseId} completed and saved to History!`, 'success');
   };
 
   // Toast notifications
@@ -693,6 +783,63 @@ export default function App() {
         parts={filteredParts}
       />
 
+      {/* Minimized Floating Wholesale Bar (Visible when estimate is ongoing and modal is closed/minimized) */}
+      {!isWholesaleModalOpen && wholesaleItems.length > 0 && (
+        <div className="fixed bottom-4 left-3 right-3 sm:left-auto sm:right-6 sm:w-auto z-40 animate-in slide-in-from-bottom-5 duration-200">
+          <div className="bg-slate-900/95 backdrop-blur-md border-2 border-amber-500/80 rounded-2xl p-2.5 sm:p-3 shadow-2xl shadow-black/80 flex items-center justify-between gap-3">
+            {/* Clickable Info Area: Opens Modal */}
+            <div
+              onClick={() => setIsWholesaleModalOpen(true)}
+              className="flex items-center gap-2.5 min-w-0 cursor-pointer hover:opacity-90 transition pr-1"
+              title="Click to resume Wholesale Estimate"
+            >
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shrink-0 shadow">
+                <Calculator className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                    Ongoing Wholesale
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-semibold">
+                    {wholesaleTotalUnits} pcs ({wholesaleItems.length} items)
+                  </span>
+                </div>
+                <div className="text-xs sm:text-sm font-black text-white truncate flex items-baseline gap-2 flex-wrap">
+                  <span>Total: <span className="text-amber-400">{formatPHP(wholesaleGrandTotal)}</span></span>
+                  {wholesaleShopPriceMargin > 0 && (
+                    <span className="text-[10px] text-emerald-400 font-bold">
+                      Margin: +{formatPHP(wholesaleShopPriceMargin)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Actions: View & Done */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={() => setIsWholesaleModalOpen(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center gap-1 active:scale-95 cursor-pointer"
+                title="Open and edit estimate"
+              >
+                <span>View</span>
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                onClick={handleCompleteWholesaleFromBar}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-black shadow-md shadow-orange-500/20 transition flex items-center gap-1 active:scale-95 cursor-pointer"
+                title="Complete purchase and save to history"
+              >
+                <span>Done</span>
+                <Check className="w-3.5 h-3.5 stroke-[3]" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Wholesale Estimation & Quotation Modal */}
       <WholesaleEstimateModal
         isOpen={isWholesaleModalOpen}
@@ -700,8 +847,9 @@ export default function App() {
         catalogParts={parts}
         estimateItems={wholesaleItems}
         onUpdateItems={setWholesaleItems}
-        onClearItems={handleClearWholesale}
+        onClearItems={() => handleClearWholesale(true)}
         onAddItem={handleAddToWholesale}
+        onNotify={showToast}
       />
     </div>
   );

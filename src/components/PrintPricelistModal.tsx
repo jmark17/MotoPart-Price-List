@@ -99,7 +99,7 @@ export const PrintPricelistModal: React.FC<PrintPricelistModalProps> = ({
                 <th className="py-2.5 px-3">Item Name</th>
                 <th className="py-2.5 px-3">Brand</th>
                 {printMode === 'both' && <th className="py-2.5 px-3 text-right">Shop Price</th>}
-                <th className="py-2.5 px-3 text-right">SRP Price</th>
+                <th className="py-2.5 px-3 text-right">SRP Price (Dealer)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">

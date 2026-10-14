@@ -37,7 +37,7 @@ export const PartsGrid: React.FC<PartsGridProps> = ({
       {parts.map((part) => {
         const margin = part.srpPrice - part.shopPrice;
         const marginPercent =
-          part.srpPrice > 0 ? ((margin / part.srpPrice) * 100).toFixed(0) : '0';
+          part.shopPrice > 0 ? ((margin / part.shopPrice) * 100).toFixed(0) : '0';
 
         return (
           <div
@@ -66,13 +66,13 @@ export const PartsGrid: React.FC<PartsGridProps> = ({
               <div>
                 <div className="flex items-baseline space-x-2">
                   <div>
-                    <div className="text-[10px] uppercase font-semibold text-amber-500/80">SRP Price</div>
+                    <div className="text-[10px] uppercase font-bold text-amber-500/90">Dealer (SRP)</div>
                     <div className="text-base sm:text-lg font-black text-amber-400">
                       {formatPHP(part.srpPrice)}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] uppercase font-semibold text-emerald-500/80">Shop Price</div>
+                    <div className="text-[10px] uppercase font-bold text-emerald-500/90">Shop Price</div>
                     <div className="text-sm sm:text-base font-bold text-emerald-400">
                       {formatPHP(part.shopPrice)}
                     </div>
@@ -81,7 +81,7 @@ export const PartsGrid: React.FC<PartsGridProps> = ({
 
                 {margin > 0 && (
                   <div className="text-[10px] font-semibold text-emerald-400 mt-1">
-                    +{formatPHP(margin)} ({marginPercent}%) margin
+                    +{formatPHP(margin)} ({marginPercent}%) Shop Price Margin
                   </div>
                 )}
               </div>

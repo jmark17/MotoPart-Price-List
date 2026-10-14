@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User } from 'firebase/auth';
+import { AppUser } from '../services/auth';
 import {
   Wrench,
   FileSpreadsheet,
@@ -16,7 +17,7 @@ import { SheetSyncStatus } from '../types/motorPart';
 import { formatPHP } from '../utils/formatCurrency';
 
 interface HeaderProps {
-  user: User | null;
+  user: User | AppUser | null;
   syncStatus: SheetSyncStatus;
   isLoggingIn: boolean;
   onOpenAuthModal: () => void;
@@ -94,15 +95,21 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="text-sm font-bold text-slate-100">{totalParts} items</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider font-semibold text-amber-400">SRP Inventory</div>
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-amber-400">SRP (Dealer)</div>
               <div className="text-sm font-bold text-amber-300">
                 {formatPHP(totalSrpValue)}
               </div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-400">Shop Value</div>
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-400">Total Shop Price</div>
               <div className="text-sm font-bold text-emerald-300">
                 {formatPHP(totalShopValue)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider font-semibold text-cyan-400">Shop Price Margin</div>
+              <div className="text-sm font-bold text-cyan-300">
+                +{formatPHP(Math.max(0, totalSrpValue - totalShopValue))}
               </div>
             </div>
           </div>

@@ -3,9 +3,10 @@
   "appId": "1:859607925953:web:3f0e2d1f8e972f4779c040",
   "apiKey": "AIzaSyCobhiHLexEEmm1--MvLV_7DOCMdI4ecSg",
   "authDomain": "gen-lang-client-0605633828.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-motopartscatalog-f47072f3-d6e9-4521-9280-03d4fc7b9318",
   "storageBucket": "gen-lang-client-0605633828.firebasestorage.app",
   "messagingSenderId": "859607925953",
-  "measurementId": "",
+  "measurementId": "G-VPY3CVD2RT",
   "oAuthClientId": "859607925953-60seia1k0bn1hsremmbsqaqpkjivodmi.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
