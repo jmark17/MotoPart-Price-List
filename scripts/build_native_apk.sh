@@ -14,8 +14,8 @@ mkdir -p "$BUILD_DIR/assets/www"
 mkdir -p "$BUILD_DIR/obj"
 mkdir -p "$BUILD_DIR/bin"
 
-ANDROID_JAR="/opt/android-sdk/platforms/android-34/android.jar"
-R8_JAR="/opt/r8.jar"
+ANDROID_JAR="./tools/android.jar"
+R8_JAR="./tools/r8.jar"
 
 # 1. Copy web app dist into assets/www
 cp -r dist/* "$BUILD_DIR/assets/www/"
@@ -43,6 +43,7 @@ cat << 'EOF' > "$BUILD_DIR/AndroidManifest.xml"
         android:label="@string/app_name"
         android:icon="@drawable/ic_launcher"
         android:theme="@android:style/Theme.NoTitleBar"
+        android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:supportsRtl="true">
 
@@ -90,14 +91,21 @@ package com.motoparts.pricelist;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebChromeClient;
 import android.view.Window;
+import android.net.Uri;
+import java.io.InputStream;
+import java.util.HashMap;
+import java.util.Map;
 
 public class MainActivity extends Activity {
     private WebView mWebView;
+    private static final String APP_HOST = "appassets.androidplatform.net";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -111,12 +119,75 @@ public class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
 
-        mWebView.setWebViewClient(new WebViewClient());
+        mWebView.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if (APP_HOST.equals(uri.getHost())) {
+                    return getAssetResponse(uri.getPath());
+                }
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                try {
+                    Uri uri = Uri.parse(url);
+                    if (APP_HOST.equals(uri.getHost())) {
+                        return getAssetResponse(uri.getPath());
+                    }
+                } catch (Exception ignored) {}
+                return super.shouldInterceptRequest(view, url);
+            }
+
+            private WebResourceResponse getAssetResponse(String path) {
+                if (path == null || path.isEmpty() || path.equals("/")) {
+                    path = "/index.html";
+                }
+                if (path.startsWith("/")) {
+                    path = path.substring(1);
+                }
+                String assetPath = "www/" + path;
+                try {
+                    InputStream is = getAssets().open(assetPath);
+                    String mime = "application/octet-stream";
+                    if (path.endsWith(".html")) mime = "text/html";
+                    else if (path.endsWith(".js") || path.endsWith(".mjs")) mime = "application/javascript";
+                    else if (path.endsWith(".css")) mime = "text/css";
+                    else if (path.endsWith(".svg")) mime = "image/svg+xml";
+                    else if (path.endsWith(".png")) mime = "image/png";
+                    else if (path.endsWith(".jpg") || path.endsWith(".jpeg")) mime = "image/jpeg";
+                    else if (path.endsWith(".json")) mime = "application/json";
+                    else if (path.endsWith(".woff2")) mime = "font/woff2";
+                    else if (path.endsWith(".woff")) mime = "font/woff";
+                    else if (path.endsWith(".ttf")) mime = "font/ttf";
+                    else if (path.endsWith(".ico")) mime = "image/x-icon";
+
+                    Map<String, String> headers = new HashMap<>();
+                    headers.put("Access-Control-Allow-Origin", "*");
+                    return new WebResourceResponse(mime, "UTF-8", 200, "OK", headers, is);
+                } catch (Exception e) {
+                    if (!path.startsWith("assets/")) {
+                        try {
+                            InputStream is = getAssets().open("www/index.html");
+                            Map<String, String> headers = new HashMap<>();
+                            headers.put("Access-Control-Allow-Origin", "*");
+                            return new WebResourceResponse("text/html", "UTF-8", 200, "OK", headers, is);
+                        } catch (Exception ignored) {}
+                    }
+                    return null;
+                }
+            }
+        });
+
         mWebView.setWebChromeClient(new WebChromeClient());
-        mWebView.loadUrl("file:///android_asset/www/index.html");
+        mWebView.loadUrl("https://appassets.androidplatform.net/index.html");
 
         setContentView(mWebView);
     }

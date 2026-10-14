@@ -21,14 +21,19 @@ export const SCOPES = [
   'https://www.googleapis.com/auth/drive.file',
 ];
 
-const provider = new GoogleAuthProvider();
-SCOPES.forEach((scope) => {
-  provider.addScope(scope);
-});
-// Force prompt to ensure account chooser and fresh OAuth tokens are issued
-provider.setCustomParameters({
-  prompt: 'select_account',
-});
+// Helper to construct GoogleAuthProvider
+export const getGoogleProvider = (includeWorkspaceScopes = false) => {
+  const provider = new GoogleAuthProvider();
+  if (includeWorkspaceScopes) {
+    SCOPES.forEach((scope) => {
+      provider.addScope(scope);
+    });
+  }
+  provider.setCustomParameters({
+    prompt: 'select_account',
+  });
+  return provider;
+};
 
 // Flag to indicate if we are in the middle of a sign-in flow.
 let isSigningIn = false;
@@ -54,14 +59,16 @@ export const initAuth = (
   });
 };
 
-// Google Sign-In with popup & Google Workspace Scopes
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+// Google Sign-In with popup. Handles both standard login and workspace token acquisition.
+export const googleSignIn = async (
+  requestWorkspaceScopes = false
+): Promise<{ user: User; accessToken: string } | null> => {
   try {
     isSigningIn = true;
+    const provider = getGoogleProvider(requestWorkspaceScopes);
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
 
-    // Extract access token safely without crashing if token format varies
     const token =
       credential?.accessToken ||
       (result as any)._tokenResponse?.oauthAccessToken ||
@@ -75,20 +82,57 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     return { user: result.user, accessToken: token || '' };
   } catch (error: any) {
     console.error('Google Sign in error:', error);
-    // Provide user-friendly error messages for common popup restrictions
-    if (error.code === 'auth/popup-blocked') {
-      throw new Error('Sign-in popup was blocked by your browser. Please allow popups for this site.');
+
+    // If requesting workspace scopes failed with insufficient permissions, retry with basic Google profile
+    if (requestWorkspaceScopes && (error.code === 'auth/invalid-credential' || error.code === 'auth/access-denied')) {
+      try {
+        const basicProvider = getGoogleProvider(false);
+        const basicResult = await signInWithPopup(auth, basicProvider);
+        return { user: basicResult.user, accessToken: '' };
+      } catch (retryErr) {
+        console.error('Retry basic Google Sign-in error:', retryErr);
+      }
     }
-    if (error.code === 'auth/popup-closed-by-user') {
-      throw new Error('Sign-in was cancelled before completion.');
+
+    // Friendly, actionable error messages
+    if (error.code === 'auth/popup-blocked') {
+      throw new Error(
+        'Sign-in popup was blocked by your browser. Please allow popups for this site or sign in using Email & Password below.'
+      );
+    }
+    if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+      throw new Error('Sign-in window was closed before completion. Please try again.');
     }
     if (error.code === 'auth/unauthorised-domain' || error.code === 'auth/unauthorized-domain') {
-      throw new Error('This app domain is not yet authorized in Firebase Console.');
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
+      throw new Error(
+        `Domain "${currentHost}" is not yet in Firebase Authorized Domains. You can sign in using Email & Password below!`
+      );
     }
-    throw error;
+    if (error.code === 'auth/operation-not-allowed') {
+      throw new Error(
+        'Google provider is not enabled in Firebase Authentication console. Please use Email & Password sign-in below!'
+      );
+    }
+    if (error.code === 'auth/disallowed_useragent') {
+      throw new Error(
+        'Google OAuth blocks embedded WebViews. Please sign in using Email & Password below!'
+      );
+    }
+    if (error.code === 'auth/network-request-failed') {
+      throw new Error('Network error. Please check your internet connection.');
+    }
+
+    throw new Error(error.message || 'Google sign-in failed. Please try Email & Password below.');
   } finally {
     isSigningIn = false;
   }
+};
+
+// Explicit Workspace Token Request (e.g. When connecting Google Sheets)
+export const requestWorkspaceAccess = async (): Promise<string | null> => {
+  const res = await googleSignIn(true);
+  return res?.accessToken || null;
 };
 
 // Email & Password Sign-In
@@ -127,7 +171,7 @@ export const resetPassword = async (email: string): Promise<void> => {
   try {
     await sendPasswordResetEmail(auth, email.trim());
   } catch (error: any) {
-    console.error('Password reset error:', error);
+    console.error('Email password reset error:', error);
     throw error;
   }
 };

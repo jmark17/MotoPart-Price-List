@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit2, Trash2, Copy, AlertTriangle } from 'lucide-react';
+import { Edit2, Trash2, Copy, AlertTriangle, Calculator } from 'lucide-react';
 import { MotorPart } from '../types/motorPart';
 import { formatPHP } from '../utils/formatCurrency';
 
@@ -8,6 +8,8 @@ interface PartsTableProps {
   onEdit: (part: MotorPart) => void;
   onDelete: (part: MotorPart) => void;
   onDuplicate: (part: MotorPart) => void;
+  onAddToWholesale?: (part: MotorPart) => void;
+  wholesalePartIds?: Set<string>;
 }
 
 export const PartsTable: React.FC<PartsTableProps> = ({
@@ -15,6 +17,8 @@ export const PartsTable: React.FC<PartsTableProps> = ({
   onEdit,
   onDelete,
   onDuplicate,
+  onAddToWholesale,
+  wholesalePartIds = new Set(),
 }) => {
   if (parts.length === 0) {
     return (
@@ -84,6 +88,20 @@ export const PartsTable: React.FC<PartsTableProps> = ({
                 </div>
 
                 <div className="flex items-center space-x-1">
+                  {onAddToWholesale && (
+                    <button
+                      onClick={() => onAddToWholesale(part)}
+                      className={`px-2 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 active:scale-95 ${
+                        wholesalePartIds.has(part.id)
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          : 'bg-slate-800/80 text-amber-400 hover:bg-slate-700'
+                      }`}
+                      title="Add to Wholesale Estimate"
+                    >
+                      <Calculator className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>{wholesalePartIds.has(part.id) ? 'Added' : '+ Wholesale'}</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => onEdit(part)}
                     className="p-2 text-slate-400 hover:text-amber-400 bg-slate-800/60 hover:bg-slate-800 rounded-lg transition active:scale-95"
@@ -180,6 +198,20 @@ export const PartsTable: React.FC<PartsTableProps> = ({
                   {/* Actions */}
                   <td className="py-3.5 px-4 text-center whitespace-nowrap">
                     <div className="flex items-center justify-center space-x-1">
+                      {onAddToWholesale && (
+                        <button
+                          onClick={() => onAddToWholesale(part)}
+                          className={`px-2 py-1 rounded-md text-xs font-bold transition flex items-center gap-1 active:scale-95 ${
+                            wholesalePartIds.has(part.id)
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              : 'bg-slate-800 text-amber-400 hover:bg-slate-700'
+                          }`}
+                          title="Add to Wholesale Estimate"
+                        >
+                          <Calculator className="w-3.5 h-3.5 stroke-[2.5]" />
+                          <span className="hidden lg:inline">{wholesalePartIds.has(part.id) ? 'Added' : 'Wholesale'}</span>
+                        </button>
+                      )}
                       <button
                         onClick={() => onEdit(part)}
                         className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition"

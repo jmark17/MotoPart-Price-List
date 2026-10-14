@@ -6,6 +6,7 @@ import {
   Plus,
   RefreshCw,
   Printer,
+  Calculator,
   User as UserIcon,
   LogOut,
   ShieldCheck,
@@ -27,6 +28,8 @@ interface HeaderProps {
   totalParts: number;
   totalSrpValue: number;
   totalShopValue: number;
+  wholesaleCount: number;
+  onOpenWholesaleModal: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -42,6 +45,8 @@ export const Header: React.FC<HeaderProps> = ({
   totalParts,
   totalSrpValue,
   totalShopValue,
+  wholesaleCount,
+  onOpenWholesaleModal,
 }) => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -155,6 +160,21 @@ export const Header: React.FC<HeaderProps> = ({
               title="Printable Pricelist"
             >
               <Printer className="w-4 h-4" />
+            </button>
+
+            {/* Wholesale Estimation Button */}
+            <button
+              onClick={onOpenWholesaleModal}
+              className="relative flex items-center space-x-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-xs transition active:scale-95 shrink-0"
+              title="Wholesale Estimation & Calculator"
+            >
+              <Calculator className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 stroke-[2.5]" />
+              <span className="hidden sm:inline">Estimator</span>
+              {wholesaleCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-black rounded-full bg-amber-500 text-slate-950">
+                  {wholesaleCount}
+                </span>
+              )}
             </button>
 
             {/* Add Part Button */}

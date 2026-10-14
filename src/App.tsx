@@ -23,6 +23,8 @@ import { PartModal } from './components/PartModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { SheetConfigModal } from './components/SheetConfigModal';
 import { PrintPricelistModal } from './components/PrintPricelistModal';
+import { WholesaleEstimateModal } from './components/WholesaleEstimateModal';
+import { WholesaleEstimateItem } from './types/wholesale';
 import { AuthModal } from './components/AuthModal';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
@@ -87,6 +89,62 @@ export default function App() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSheetModalOpen, setIsSheetModalOpen] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [isWholesaleModalOpen, setIsWholesaleModalOpen] = useState(false);
+
+  // Wholesale estimate basket
+  const [wholesaleItems, setWholesaleItems] = useState<WholesaleEstimateItem[]>(() => {
+    try {
+      const stored = localStorage.getItem('motoparts_wholesale_items_v1');
+      if (stored) return JSON.parse(stored);
+    } catch (e) {
+      console.warn('Failed to load wholesale items', e);
+    }
+    return [];
+  });
+
+  // Save wholesale items
+  useEffect(() => {
+    try {
+      localStorage.setItem('motoparts_wholesale_items_v1', JSON.stringify(wholesaleItems));
+    } catch (e) {
+      console.warn('Failed to save wholesale items', e);
+    }
+  }, [wholesaleItems]);
+
+  const wholesalePartIds = useMemo(() => {
+    return new Set(wholesaleItems.map((i) => i.partId));
+  }, [wholesaleItems]);
+
+  const handleAddToWholesale = (part: MotorPart, qty: number = 1) => {
+    setWholesaleItems((prev) => {
+      const existingIndex = prev.findIndex((i) => i.partId === part.id);
+      if (existingIndex >= 0) {
+        const copy = [...prev];
+        copy[existingIndex] = {
+          ...copy[existingIndex],
+          quantity: copy[existingIndex].quantity + qty,
+        };
+        return copy;
+      } else {
+        const newItem: WholesaleEstimateItem = {
+          partId: part.id,
+          partNumber: part.partNumber,
+          itemName: part.itemName,
+          brand: part.brand,
+          srpPrice: part.srpPrice,
+          shopPrice: part.shopPrice,
+          quantity: qty,
+        };
+        return [...prev, newItem];
+      }
+    });
+    showToast(`Added "${part.itemName}" to Wholesale Estimate`, 'success');
+  };
+
+  const handleClearWholesale = () => {
+    setWholesaleItems([]);
+    showToast('Wholesale estimate cleared', 'info');
+  };
 
   // Toast notifications
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -497,6 +555,8 @@ export default function App() {
         totalParts={parts.length}
         totalSrpValue={totalSrpValue}
         totalShopValue={totalShopValue}
+        wholesaleCount={wholesaleItems.reduce((acc, i) => acc + i.quantity, 0)}
+        onOpenWholesaleModal={() => setIsWholesaleModalOpen(true)}
       />
 
       {/* Search & Filters */}
@@ -531,6 +591,8 @@ export default function App() {
             }}
             onDelete={(part) => setDeletePart(part)}
             onDuplicate={handleDuplicatePart}
+            onAddToWholesale={handleAddToWholesale}
+            wholesalePartIds={wholesalePartIds}
           />
         ) : (
           <PartsGrid
@@ -541,6 +603,8 @@ export default function App() {
             }}
             onDelete={(part) => setDeletePart(part)}
             onDuplicate={handleDuplicatePart}
+            onAddToWholesale={handleAddToWholesale}
+            wholesalePartIds={wholesalePartIds}
           />
         )}
       </main>
@@ -627,6 +691,17 @@ export default function App() {
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         parts={filteredParts}
+      />
+
+      {/* Wholesale Estimation & Quotation Modal */}
+      <WholesaleEstimateModal
+        isOpen={isWholesaleModalOpen}
+        onClose={() => setIsWholesaleModalOpen(false)}
+        catalogParts={parts}
+        estimateItems={wholesaleItems}
+        onUpdateItems={setWholesaleItems}
+        onClearItems={handleClearWholesale}
+        onAddItem={handleAddToWholesale}
       />
     </div>
   );
