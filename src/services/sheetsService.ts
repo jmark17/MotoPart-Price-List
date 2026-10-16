@@ -184,17 +184,21 @@ export async function updateSpreadsheetValues(
   sheetName: string,
   rows: (string | number)[][]
 ): Promise<void> {
-  // Clear existing cells in sheet first to avoid ghost rows
-  const clearRange = encodeURIComponent(formatA1Range(sheetName, 'A1:Z5000'));
+  const safeSheet = sheetName.replace(/'/g, "''");
+
+  // 1. Clear existing cells in sheet first to avoid ghost rows
   try {
     const clearRes = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${clearRange}:clear`,
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`,
       {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          ranges: [`'${safeSheet}'!A1:Z5000`],
+        }),
       }
     );
     if (!clearRes.ok && clearRes.status === 401) {
@@ -207,21 +211,31 @@ export async function updateSpreadsheetValues(
     console.warn('Values clear warning (non-fatal, continuing to write):', clearErr);
   }
 
-  const updateRange = encodeURIComponent(formatA1Range(sheetName, 'A1'));
-  const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${updateRange}?valueInputOption=USER_ENTERED`;
+  // 2. Write new rows using values:batchUpdate to avoid URL encoding issues
+  const colCount = Math.max(1, rows[0]?.length || 5);
+  const colLetter = String.fromCharCode(65 + colCount - 1);
+  const targetRange = `'${safeSheet}'!A1:${colLetter}${rows.length}`;
 
-  const res = await fetch(updateUrl, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      range: formatA1Range(sheetName, 'A1'),
-      majorDimension: 'ROWS',
-      values: rows,
-    }),
-  });
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: [
+          {
+            range: targetRange,
+            majorDimension: 'ROWS',
+            values: rows,
+          },
+        ],
+      }),
+    }
+  );
 
   if (!res.ok) {
     const errorBody = await res.json().catch(() => ({}));

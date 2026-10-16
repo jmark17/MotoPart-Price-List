@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { SheetSyncStatus } from '../types/motorPart';
 import { formatPHP } from '../utils/formatCurrency';
+import appLogo from '../assets/images/motoparts_app_logo_1792154476556.jpg';
 
 interface HeaderProps {
   user: User | AppUser | null;
@@ -68,15 +69,12 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-18 py-2 sm:py-3">
           {/* Logo & Title */}
-          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl overflow-hidden bg-slate-950 border border-amber-500/40 flex items-center justify-center shadow-lg shadow-amber-500/10">
+          <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-xl overflow-hidden bg-slate-950 border border-amber-500/50 flex items-center justify-center shadow-lg shadow-amber-500/20 ring-1 ring-amber-500/30">
               <img
-                src="/logo.jpg"
+                src={appLogo}
                 alt="MotoParts App Logo"
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.currentTarget as HTMLElement).style.display = 'none';
-                }}
+                className="w-full h-full object-cover scale-105"
               />
             </div>
             <div className="min-w-0">

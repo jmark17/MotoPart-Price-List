@@ -187,11 +187,11 @@ const ensureGoogleGsiLoaded = (): Promise<any> => {
   });
 };
 
-// Google Sign-In with Google Identity Services & Firebase Fallback
+// Google Sign-In: Direct Google Identity Services with Firebase Auth fallback
 export const googleSignIn = async (
   requestWorkspaceScopes = true
 ): Promise<{ user: User | AppUser; accessToken: string } | null> => {
-  // Method A: Direct Google OAuth via Google Identity Services
+  // Method 1: Google Identity Services token client (Direct 1P Google Workspace OAuth)
   try {
     const oauth2 = await ensureGoogleGsiLoaded();
     const scopesList = [
@@ -209,7 +209,11 @@ export const googleSignIn = async (
           prompt: 'select_account',
           callback: (resp: any) => {
             if (resp.error) {
-              reject(new Error(resp.error_description || resp.error));
+              if (resp.error === 'popup_closed_by_user' || resp.error === 'access_denied') {
+                reject(new Error('Sign-in was cancelled.'));
+              } else {
+                reject(new Error(resp.error_description || resp.error));
+              }
             } else {
               resolve(resp);
             }
@@ -221,72 +225,89 @@ export const googleSignIn = async (
       }
     });
 
-    const accessToken = tokenResponse.access_token;
-    if (accessToken) {
-      setCachedAccessToken(accessToken);
+    const accessToken = tokenResponse?.access_token;
+    if (!accessToken) {
+      throw new Error('No access token received from Google.');
+    }
 
-      // Fetch user profile directly from Google
+    setCachedAccessToken(accessToken);
+
+    // Fetch user profile from Google UserInfo
+    let googleUser: AppUser = {
+      uid: `google_${Date.now()}`,
+      email: 'user@gmail.com',
+      displayName: 'Google User',
+      photoURL: null,
+      emailVerified: true,
+    };
+
+    try {
       const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-
       if (profileRes.ok) {
         const profile = await profileRes.json();
-        const googleUser: AppUser = {
+        googleUser = {
           uid: `google_${profile.sub || Date.now()}`,
           email: profile.email || 'user@gmail.com',
           displayName: profile.name || profile.given_name || 'Google User',
           photoURL: profile.picture || null,
           emailVerified: profile.email_verified ?? true,
         };
-
-        saveLocalUserSession(googleUser);
-        notifyAuthListeners(googleUser, accessToken);
-
-        return { user: googleUser, accessToken };
       }
+    } catch (profileErr) {
+      console.warn('UserInfo fetch warning (proceeding with token):', profileErr);
     }
+
+    saveLocalUserSession(googleUser);
+    notifyAuthListeners(googleUser, accessToken);
+
+    return { user: googleUser, accessToken };
   } catch (gisError: any) {
-    console.warn('Google Identity Services flow encountered an error, trying Firebase popup fallback:', gisError);
-  }
+    console.warn('Google Identity Services flow note:', gisError?.message);
 
-  // Method B: Firebase Popup Fallback
-  try {
-    const provider = new GoogleAuthProvider();
-    if (requestWorkspaceScopes) {
-      SCOPES.forEach((s) => provider.addScope(s));
-    }
-    provider.setCustomParameters({ prompt: 'select_account' });
-
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const token =
-      credential?.accessToken ||
-      (result as any)._tokenResponse?.oauthAccessToken ||
-      (result as any)._tokenResponse?.idToken ||
-      '';
-
-    if (token) {
-      setCachedAccessToken(token);
+    if (gisError.message?.includes('cancelled')) {
+      throw gisError;
     }
 
-    notifyAuthListeners(result.user, token);
-    return { user: result.user, accessToken: token };
-  } catch (fbError: any) {
-    console.error('Firebase Google popup failed:', fbError);
+    // Method 2: Firebase Auth Google Popup fallback
+    try {
+      const provider = new GoogleAuthProvider();
+      if (requestWorkspaceScopes) {
+        SCOPES.forEach((s) => provider.addScope(s));
+      }
+      provider.setCustomParameters({ prompt: 'select_account' });
 
-    if (fbError.code === 'auth/popup-blocked') {
-      throw new Error('Sign-in popup was blocked by your browser. Please allow popups or use Email & Password below.');
-    }
-    if (fbError.code === 'auth/popup-closed-by-user') {
-      throw new Error('Sign-in was cancelled before completion.');
-    }
+      const result = await signInWithPopup(auth, provider);
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const token =
+        credential?.accessToken ||
+        (result as any)._tokenResponse?.oauthAccessToken ||
+        (result as any)._tokenResponse?.idToken ||
+        '';
 
-    throw new Error(
-      fbError.message?.includes('Requested action is invalid')
-        ? 'Google Sign-In service is configuring. You can sign in immediately using Email & Password below!'
-        : fbError.message || 'Google Sign-In failed. Please use Email & Password below.'
-    );
+      if (token) {
+        setCachedAccessToken(token);
+      }
+
+      notifyAuthListeners(result.user, token);
+      return { user: result.user, accessToken: token };
+    } catch (fbError: any) {
+      console.warn('Firebase Google fallback note:', fbError?.code || fbError?.message);
+
+      if (fbError.code === 'auth/popup-blocked') {
+        throw new Error('Sign-in popup was blocked by your browser. Please allow popups or use Email & Password.');
+      }
+      if (fbError.code === 'auth/popup-closed-by-user') {
+        throw new Error('Sign-in was cancelled before completion.');
+      }
+
+      throw new Error(
+        gisError.message ||
+          fbError.message ||
+          'Google Sign-In is unavailable in this browser environment. You can sign in using Email & Password or Quick Access below.'
+      );
+    }
   }
 };
 
@@ -463,19 +484,27 @@ export const getAccessToken = async (interactive: boolean = false): Promise<stri
     return cachedAccessToken;
   }
 
-  // 2. Check localStorage/sessionStorage with freshness check
+  // 2. Check localStorage/sessionStorage
   try {
     const storedToken = localStorage.getItem(LOCAL_TOKEN_KEY) || sessionStorage.getItem(LOCAL_TOKEN_KEY);
-    const storedExpiry = localStorage.getItem(LOCAL_TOKEN_EXPIRY_KEY);
-    const isFresh = storedToken && storedExpiry && Date.now() < Number(storedExpiry);
-
-    if (storedToken && isFresh) {
+    if (storedToken) {
       cachedAccessToken = storedToken;
       return storedToken;
     }
   } catch (e) {}
 
-  // 3. Try to obtain/refresh token via Google Identity Services
+  if (!interactive) {
+    return null;
+  }
+
+  // 3. Prompt user for authorization if interactive
+  return await requestGoogleAuthorization();
+};
+
+/**
+ * Explicitly triggers Google OAuth authorization prompt specifically for Google Sheets integration
+ */
+export const requestGoogleAuthorization = async (): Promise<string | null> => {
   try {
     const oauth2 = await ensureGoogleGsiLoaded();
     const scopesList = ['email', 'profile', 'openid', ...SCOPES].join(' ');
@@ -485,10 +514,14 @@ export const getAccessToken = async (interactive: boolean = false): Promise<stri
         const client = oauth2.initTokenClient({
           client_id: firebaseConfig.oAuthClientId,
           scope: scopesList,
-          prompt: interactive ? 'select_account' : '',
+          prompt: 'select_account',
           callback: (resp: any) => {
             if (resp.error) {
-              reject(new Error(resp.error_description || resp.error));
+              if (resp.error === 'popup_closed_by_user' || resp.error === 'access_denied') {
+                reject(new Error('Google authorization was cancelled.'));
+              } else {
+                reject(new Error(resp.error_description || resp.error));
+              }
             } else {
               resolve(resp);
             }
@@ -504,25 +537,11 @@ export const getAccessToken = async (interactive: boolean = false): Promise<stri
       setCachedAccessToken(tokenResponse.access_token);
       return tokenResponse.access_token;
     }
-  } catch (err) {
-    // If silent refresh failed but we have an unexpired stored token, fall back
-    try {
-      const fallbackToken = localStorage.getItem(LOCAL_TOKEN_KEY) || sessionStorage.getItem(LOCAL_TOKEN_KEY);
-      if (fallbackToken) {
-        cachedAccessToken = fallbackToken;
-        return fallbackToken;
-      }
-    } catch (e) {}
+  } catch (err: any) {
+    console.warn('Google authorization prompt error:', err);
+    throw err;
   }
-
   return null;
-};
-
-/**
- * Explicitly triggers Google OAuth authorization prompt specifically for Google Sheets integration
- */
-export const requestGoogleAuthorization = async (): Promise<string | null> => {
-  return await getAccessToken(true);
 };
 
 export const logout = async () => {

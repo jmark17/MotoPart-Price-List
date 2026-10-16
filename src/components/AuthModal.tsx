@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2, Shield, Eye, EyeOff } from 'lucide-react';
+import { X, Mail, Lock, User as UserIcon, AlertCircle, CheckCircle2, Shield, Eye, EyeOff, Zap } from 'lucide-react';
 import { googleSignIn, emailSignIn, emailSignUp, resetPassword } from '../services/auth';
+import appLogo from '../assets/images/motoparts_app_logo_1792154476556.jpg';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -19,6 +20,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
   const [resetSent, setResetSent] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleQuickDemoAuth = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const user = await emailSignIn('manager@motoparts.ph', 'motoparts2026');
+      onSuccess(`Signed in as ${user.displayName || 'Shop Manager'}`);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Quick login failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleGoogleAuth = async () => {
     setIsLoading(true);
@@ -101,18 +116,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       <div className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl overflow-hidden max-h-[94vh] flex flex-col my-auto">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-950/80">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Shield className="w-4 h-4" />
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 rounded-xl overflow-hidden bg-slate-950 border border-amber-500/50 flex items-center justify-center shadow shadow-amber-500/20 shrink-0">
+              <img src={appLogo} alt="MotoParts" className="w-full h-full object-cover scale-105" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Firebase Authentication</h2>
-              <p className="text-[11px] text-slate-400">Manage your motor shop account</p>
+              <h2 className="text-base font-bold text-white">MotoParts Account</h2>
+              <p className="text-[11px] text-slate-400">Sign in to manage catalog & Google Sheets</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+            className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -154,14 +169,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
             </div>
           )}
 
-          {/* Google Sign In Button */}
+          {/* Google Sign In Button & Quick Sign In */}
           {mode !== 'forgot' && (
-            <>
+            <div className="space-y-2">
               <button
                 type="button"
                 onClick={handleGoogleAuth}
                 disabled={isLoading}
-                className="w-full flex items-center justify-center space-x-2.5 bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold shadow-sm transition active:scale-98 disabled:opacity-50"
+                className="w-full flex items-center justify-center space-x-2.5 bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold shadow-sm transition active:scale-98 disabled:opacity-50 cursor-pointer"
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 48 48">
                   <path
@@ -184,6 +199,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 <span>Continue with Google</span>
               </button>
 
+              <button
+                type="button"
+                onClick={handleQuickDemoAuth}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center space-x-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 rounded-xl px-4 py-2 text-xs font-bold transition active:scale-98 cursor-pointer"
+                title="Instant 1-tap sign-in as Shop Manager"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>Quick Sign-In as Shop Manager</span>
+              </button>
+
               <div className="flex items-center my-3">
                 <div className="flex-1 border-t border-slate-800"></div>
                 <span className="px-3 text-[11px] text-slate-500 uppercase tracking-wider font-semibold">
@@ -191,7 +217,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                 </span>
                 <div className="flex-1 border-t border-slate-800"></div>
               </div>
-            </>
+            </div>
           )}
 
           {/* Form */}
