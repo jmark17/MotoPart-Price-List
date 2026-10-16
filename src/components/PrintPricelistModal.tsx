@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Printer, Wrench } from 'lucide-react';
+import { X, Printer, Wrench, FileDown } from 'lucide-react';
 import { MotorPart } from '../types/motorPart';
 import { formatPHP } from '../utils/formatCurrency';
+import { exportPartsPricelistPdf } from '../utils/exportPdf';
 
 interface PrintPricelistModalProps {
   isOpen: boolean;
@@ -20,6 +21,10 @@ export const PrintPricelistModal: React.FC<PrintPricelistModalProps> = ({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportPdf = () => {
+    exportPartsPricelistPdf(parts, printMode);
   };
 
   return (
@@ -54,8 +59,17 @@ export const PrintPricelistModal: React.FC<PrintPricelistModalProps> = ({
             </div>
 
             <button
+              onClick={handleExportPdf}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow transition cursor-pointer"
+              title="Download official PDF copy"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>Export PDF</span>
+            </button>
+
+            <button
               onClick={handlePrint}
-              className="flex items-center space-x-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow transition"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-bold shadow transition cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>Print</span>

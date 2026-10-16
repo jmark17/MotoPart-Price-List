@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit2, Trash2, Copy, AlertTriangle, Calculator } from 'lucide-react';
+import { Edit2, Trash2, AlertTriangle, Calculator } from 'lucide-react';
 import { MotorPart } from '../types/motorPart';
 import { formatPHP } from '../utils/formatCurrency';
 
@@ -7,7 +7,6 @@ interface PartsTableProps {
   parts: MotorPart[];
   onEdit: (part: MotorPart) => void;
   onDelete: (part: MotorPart) => void;
-  onDuplicate: (part: MotorPart) => void;
   onAddToWholesale?: (part: MotorPart) => void;
   wholesalePartIds?: Set<string>;
 }
@@ -16,7 +15,6 @@ export const PartsTable: React.FC<PartsTableProps> = ({
   parts,
   onEdit,
   onDelete,
-  onDuplicate,
   onAddToWholesale,
   wholesalePartIds = new Set(),
 }) => {
@@ -108,13 +106,6 @@ export const PartsTable: React.FC<PartsTableProps> = ({
                     title="Edit Part"
                   >
                     <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDuplicate(part)}
-                    className="p-2 text-slate-400 hover:text-sky-400 bg-slate-800/60 hover:bg-slate-800 rounded-lg transition active:scale-95"
-                    title="Duplicate Part"
-                  >
-                    <Copy className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => onDelete(part)}
@@ -218,13 +209,6 @@ export const PartsTable: React.FC<PartsTableProps> = ({
                         title="Edit Part"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => onDuplicate(part)}
-                        className="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-slate-800 rounded-lg transition"
-                        title="Duplicate Part"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => onDelete(part)}

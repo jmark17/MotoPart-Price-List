@@ -282,12 +282,14 @@ export default function App() {
     const targetId = overrideSheetId || syncStatus.spreadsheetId;
     if (!targetId) return;
 
-    let token = await getAccessToken();
+    let token = await getAccessToken(false);
     if (!token) {
       setSyncStatus((prev) => ({
         ...prev,
-        error: 'Google authentication required to sync with Google Sheet. Please sign in with Google.',
+        isSyncing: false,
+        error: 'Google authorization required. Please sign in with Google or reconnect in Sheet settings.',
       }));
+      showToast('Google Sheet sync paused: Sign in with Google to authorize updates', 'info');
       return;
     }
 
@@ -307,6 +309,35 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Error syncing parts to sheet:', err);
+
+      // Auto-retry once if token expired (HTTP 401)
+      if (
+        err.message?.includes('401') ||
+        err.message?.includes('invalid authentication credentials') ||
+        err.message?.includes('Google authorization expired')
+      ) {
+        setCachedAccessToken(null);
+        try {
+          const freshToken = await getAccessToken(false);
+          if (freshToken) {
+            await syncAllPartsToSheet(freshToken, targetId, targetParts);
+            const now = new Date().toISOString();
+            setSyncStatus((prev) => ({
+              ...prev,
+              isSyncing: false,
+              lastSyncedAt: now,
+              error: null,
+            }));
+            if (showToastMessage) {
+              showToast(`Google Sheet updated successfully (${targetParts.length} parts synchronized in PHP)`);
+            }
+            return;
+          }
+        } catch (retryErr) {
+          console.warn('Auto-refresh retry failed:', retryErr);
+        }
+      }
+
       setSyncStatus((prev) => ({
         ...prev,
         isSyncing: false,
@@ -497,23 +528,6 @@ export default function App() {
     }
   };
 
-  // Duplicate part helper
-  const handleDuplicatePart = (part: MotorPart) => {
-    const duplicated: MotorPart = {
-      ...part,
-      id: `part-${Date.now()}`,
-      partNumber: `${part.partNumber}-CPY`,
-      itemName: `${part.itemName} (Copy)`,
-      updatedAt: new Date().toISOString(),
-    };
-    const updated = [duplicated, ...parts];
-    setParts(updated);
-    showToast(`Duplicated "${part.itemName}"`);
-
-    if (syncStatus.isConnected && syncStatus.autoSync) {
-      triggerSheetSync(updated);
-    }
-  };
 
   // Delete part handler
   const handleConfirmDelete = async () => {
@@ -680,7 +694,6 @@ export default function App() {
               setIsAddEditModalOpen(true);
             }}
             onDelete={(part) => setDeletePart(part)}
-            onDuplicate={handleDuplicatePart}
             onAddToWholesale={handleAddToWholesale}
             wholesalePartIds={wholesalePartIds}
           />
@@ -692,7 +705,6 @@ export default function App() {
               setIsAddEditModalOpen(true);
             }}
             onDelete={(part) => setDeletePart(part)}
-            onDuplicate={handleDuplicatePart}
             onAddToWholesale={handleAddToWholesale}
             wholesalePartIds={wholesalePartIds}
           />
@@ -809,7 +821,7 @@ export default function App() {
                   <span>Total: <span className="text-amber-400">{formatPHP(wholesaleGrandTotal)}</span></span>
                   {wholesaleShopPriceMargin > 0 && (
                     <span className="text-[10px] text-emerald-400 font-bold">
-                      Margin: +{formatPHP(wholesaleShopPriceMargin)}
+                      Shop Price Margin: +{formatPHP(wholesaleShopPriceMargin)}
                     </span>
                   )}
                 </div>

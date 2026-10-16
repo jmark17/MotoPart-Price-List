@@ -69,8 +69,15 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center justify-between h-14 sm:h-18 py-2 sm:py-3">
           {/* Logo & Title */}
           <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/20 text-slate-950">
-              <Wrench className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2.5]" />
+            <div className="w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-xl overflow-hidden bg-slate-950 border border-amber-500/40 flex items-center justify-center shadow-lg shadow-amber-500/10">
+              <img
+                src="/logo.jpg"
+                alt="MotoParts App Logo"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLElement).style.display = 'none';
+                }}
+              />
             </div>
             <div className="min-w-0">
               <div className="flex items-center space-x-1.5 sm:space-x-2">
@@ -120,21 +127,39 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenSheetConfig}
               className={`flex items-center space-x-1.5 px-2 sm:px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
-                syncStatus.isConnected
+                syncStatus.error
+                  ? 'bg-amber-950/70 border-amber-500/60 text-amber-300 hover:bg-amber-900/60'
+                  : syncStatus.isConnected
                   ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
                   : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:bg-slate-700/80'
               }`}
-              title={syncStatus.isConnected ? 'Google Sheet Connected' : 'Connect Google Sheet'}
+              title={
+                syncStatus.error
+                  ? `Sync Alert: ${syncStatus.error}`
+                  : syncStatus.isConnected
+                  ? 'Google Sheet Connected'
+                  : 'Connect Google Sheet'
+              }
             >
-              <FileSpreadsheet className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${syncStatus.isConnected ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <FileSpreadsheet
+                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
+                  syncStatus.error
+                    ? 'text-amber-400'
+                    : syncStatus.isConnected
+                    ? 'text-emerald-400'
+                    : 'text-slate-400'
+                }`}
+              />
               <span className="hidden xs:inline text-[11px] sm:text-xs">
-                {syncStatus.isConnected ? (
-                  syncStatus.isSyncing ? 'Syncing...' : 'Sheet'
-                ) : (
-                  'Connect'
-                )}
+                {syncStatus.error
+                  ? 'Sync Alert'
+                  : syncStatus.isConnected
+                  ? syncStatus.isSyncing
+                    ? 'Syncing...'
+                    : 'Sheet'
+                  : 'Connect'}
               </span>
-              {syncStatus.isConnected && (
+              {syncStatus.isConnected && !syncStatus.error && (
                 <span className="relative flex h-2 w-2 shrink-0">
                   {syncStatus.isSyncing ? (
                     <span className="animate-spin inline-block h-2 w-2 rounded-full border border-emerald-400 border-t-transparent"></span>

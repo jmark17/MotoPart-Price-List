@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { CompletedPurchase, CompletedPurchaseItem } from '../types/wholesale';
+import { MotorPart } from '../types/motorPart';
 import { formatPHP } from './formatCurrency';
 
 /**
@@ -321,4 +322,123 @@ export const exportEstimateQuotationPdf = (data: {
   };
 
   exportSinglePurchasePdf(tempPurchase);
+};
+
+/**
+ * Export catalog parts inventory pricelist as a beautifully formatted PDF document
+ */
+export const exportPartsPricelistPdf = (
+  parts: MotorPart[],
+  mode: 'both' | 'srp-only' = 'both'
+) => {
+  if (!parts || parts.length === 0) return;
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  // Header Banner
+  doc.setFillColor(15, 23, 42); // slate-900
+  doc.rect(0, 0, pageWidth, 28, 'F');
+
+  // Amber Accent Line
+  doc.setFillColor(245, 158, 11); // amber-500
+  doc.rect(0, 28, pageWidth, 2.5, 'F');
+
+  // Title
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('MOTOPARTS PRICELIST', 14, 12);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(203, 213, 225);
+  doc.text(
+    mode === 'both'
+      ? 'OFFICIAL DEALER & SHOP INVENTORY PRICELIST (PHILIPPINE PESO)'
+      : 'OFFICIAL RETAIL PRICELIST (PHILIPPINE PESO)',
+    14,
+    18
+  );
+
+  const genDate = new Date().toLocaleDateString('en-PH', { dateStyle: 'medium' });
+  doc.text(
+    `Generated: ${genDate}  |  Total Items: ${parts.length}`,
+    pageWidth - 14,
+    18,
+    { align: 'right' }
+  );
+
+  // Table Data
+  const headers =
+    mode === 'both'
+      ? ['#', 'Part #', 'Item Name', 'Brand', 'Shop Price (PHP)', 'SRP Price (PHP)']
+      : ['#', 'Part #', 'Item Name', 'Brand', 'SRP Price (PHP)'];
+
+  const rows = parts.map((p, idx) => {
+    if (mode === 'both') {
+      return [
+        (idx + 1).toString(),
+        p.partNumber,
+        p.itemName,
+        p.brand,
+        formatMoney(p.shopPrice),
+        formatMoney(p.srpPrice),
+      ];
+    }
+    return [
+      (idx + 1).toString(),
+      p.partNumber,
+      p.itemName,
+      p.brand,
+      formatMoney(p.srpPrice),
+    ];
+  });
+
+  autoTable(doc, {
+    startY: 36,
+    head: [headers],
+    body: rows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [30, 41, 59], // slate-800
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 8,
+      halign: 'left',
+    },
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 2,
+      textColor: [15, 23, 42],
+    },
+    columnStyles:
+      mode === 'both'
+        ? {
+            0: { cellWidth: 8, halign: 'center' },
+            1: { cellWidth: 28, fontStyle: 'bold' },
+            2: { cellWidth: 'auto' },
+            3: { cellWidth: 26 },
+            4: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: [5, 150, 105] },
+            5: { cellWidth: 30, halign: 'right', fontStyle: 'bold', textColor: [217, 119, 6] },
+          }
+        : {
+            0: { cellWidth: 10, halign: 'center' },
+            1: { cellWidth: 32, fontStyle: 'bold' },
+            2: { cellWidth: 'auto' },
+            3: { cellWidth: 30 },
+            4: { cellWidth: 36, halign: 'right', fontStyle: 'bold', textColor: [217, 119, 6] },
+          },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  doc.save(`MotoParts_Catalog_Pricelist_${mode}.pdf`);
 };

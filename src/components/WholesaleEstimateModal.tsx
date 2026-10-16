@@ -901,8 +901,11 @@ export const WholesaleEstimateModal: React.FC<WholesaleEstimateModalProps> = ({
               {purchaseHistory.length > 0 && (
                 <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                   <button
-                    onClick={() => exportAllPurchaseHistoryPdf(purchaseHistory)}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-extrabold shadow-md shadow-orange-500/20 transition active:scale-95"
+                    onClick={() => {
+                      exportAllPurchaseHistoryPdf(purchaseHistory);
+                      onNotify?.(`Exported ${purchaseHistory.length} purchase history records to PDF!`, 'success');
+                    }}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 text-xs font-extrabold shadow-md shadow-orange-500/20 transition active:scale-95 cursor-pointer"
                     title="Export all completed purchase history to PDF file"
                   >
                     <FileDown className="w-3.5 h-3.5 stroke-[2.5]" />

@@ -302,9 +302,24 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
 
           {/* Error Notice */}
           {syncStatus.error && (
-            <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 flex items-start space-x-2">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-              <span>{syncStatus.error}</span>
+            <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-xs text-rose-300 space-y-2">
+              <div className="flex items-start space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
+                <span>{syncStatus.error}</span>
+              </div>
+              {(syncStatus.error.toLowerCase().includes('google') ||
+                syncStatus.error.toLowerCase().includes('authoriz') ||
+                syncStatus.error.toLowerCase().includes('sign in') ||
+                syncStatus.error.toLowerCase().includes('401')) && (
+                <button
+                  type="button"
+                  onClick={onLogin}
+                  disabled={isLoggingIn}
+                  className="w-full flex items-center justify-center space-x-2 py-2 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs shadow transition cursor-pointer"
+                >
+                  <span>Authorize / Reconnect Google Account</span>
+                </button>
+              )}
             </div>
           )}
         </div>
