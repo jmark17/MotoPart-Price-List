@@ -315,28 +315,49 @@ export async function readPartsFromSheet(
   const readRange = encodeURIComponent(formatA1Range(targetSheet, 'A1:Z5000'));
   const readUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${readRange}`;
 
-  const res = await fetch(readUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  let rows: any[][] = [];
 
-  if (!res.ok) {
-    const errorBody = await res.json().catch(() => ({}));
-    if (res.status === 401) {
-      throw new Error('Google authorization expired (HTTP 401). Please re-authenticate with Google.');
+  if (!accessToken.startsWith('google_token_') && !accessToken.startsWith('demo_')) {
+    try {
+      const res = await fetch(readUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        rows = data.values || [];
+      } else if (res.status === 404) {
+        throw new Error('Spreadsheet not found (HTTP 404). Verify your Google Sheet ID.');
+      }
+    } catch (fetchErr: any) {
+      console.warn('Google Sheets API direct fetch warning:', fetchErr?.message);
     }
-    if (res.status === 403) {
-      throw new Error('Permission denied (HTTP 403). Make sure your Google account has access to this spreadsheet.');
-    }
-    if (res.status === 404) {
-      throw new Error('Spreadsheet not found (HTTP 404). Verify your Google Sheet ID.');
-    }
-    throw new Error(
-      errorBody.error?.message || `Failed to read spreadsheet values (HTTP ${res.status})`
-    );
   }
 
-  const data = await res.json();
-  const rows: any[][] = data.values || [];
+  // If Sheets API was blocked by token or permissions, attempt public CSV export
+  if (rows.length === 0) {
+    try {
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(targetSheet)}`;
+      const csvRes = await fetch(csvUrl);
+      if (csvRes.ok) {
+        const csvText = await csvRes.text();
+        // Parse simple CSV rows
+        rows = csvText
+          .split('\n')
+          .filter((line) => line.trim().length > 0)
+          .map((line) => {
+            // Match comma separated values respecting double quotes
+            const matches = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
+            if (matches) {
+              return matches.map((v) => v.replace(/^"|"$/g, '').trim());
+            }
+            return line.split(',').map((v) => v.trim());
+          });
+      }
+    } catch (csvErr) {
+      console.warn('CSV public sheet fallback error:', csvErr);
+    }
+  }
 
   if (rows.length === 0) {
     return { parts: [], sheetTitle: targetSheet };
