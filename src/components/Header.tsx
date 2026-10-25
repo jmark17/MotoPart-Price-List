@@ -12,6 +12,7 @@ import {
   LogOut,
   ShieldCheck,
   ChevronDown,
+  Download,
 } from 'lucide-react';
 import { SheetSyncStatus } from '../types/motorPart';
 import { formatPHP } from '../utils/formatCurrency';
@@ -72,7 +73,10 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0">
             <div className="w-9 h-9 sm:w-11 sm:h-11 shrink-0 rounded-xl overflow-hidden bg-slate-950 border border-amber-500/50 flex items-center justify-center shadow-lg shadow-amber-500/20 ring-1 ring-amber-500/30">
               <img
-                src={appLogo}
+                src="/logo.jpg"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = appLogo;
+                }}
                 alt="MotoParts App Logo"
                 className="w-full h-full object-cover scale-105"
               />
@@ -266,6 +270,16 @@ export const Header: React.FC<HeaderProps> = ({
                         <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
                         <span>Google Sheet Settings</span>
                       </button>
+
+                      <a
+                        href="/app-debug.apk"
+                        download="MotoParts-Pricelist.apk"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="w-full text-left px-3.5 py-2 text-xs text-amber-300 hover:text-amber-200 hover:bg-slate-800 flex items-center space-x-2 transition"
+                      >
+                        <Download className="w-4 h-4 text-amber-400" />
+                        <span>Download Android APK</span>
+                      </a>
                     </div>
 
                     <div className="pt-1 border-t border-slate-800">

@@ -118,7 +118,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-950/80">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 rounded-xl overflow-hidden bg-slate-950 border border-amber-500/50 flex items-center justify-center shadow shadow-amber-500/20 shrink-0">
-              <img src={appLogo} alt="MotoParts" className="w-full h-full object-cover scale-105" />
+              <img
+                src="/logo.jpg"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = appLogo;
+                }}
+                alt="MotoParts"
+                className="w-full h-full object-cover scale-105"
+              />
             </div>
             <div>
               <h2 className="text-base font-bold text-white">MotoParts Account</h2>

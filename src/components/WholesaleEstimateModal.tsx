@@ -414,8 +414,8 @@ export const WholesaleEstimateModal: React.FC<WholesaleEstimateModalProps> = ({
           {/* Top Line: Title + Live Clock + Minimize/Close (X) Button */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold shrink-0">
-                <Calculator className="w-4 h-4" />
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg overflow-hidden border border-amber-500/40 bg-slate-950 flex items-center justify-center shrink-0">
+                <img src="/logo.jpg" alt="MotoParts" className="w-full h-full object-cover scale-105" />
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">

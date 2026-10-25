@@ -87,16 +87,20 @@ export const PrintPricelistModal: React.FC<PrintPricelistModalProps> = ({
         <div className="p-6 sm:p-8 overflow-y-auto bg-white text-slate-900 print:p-0 flex-1">
           {/* Printable Header */}
           <div className="border-b-2 border-slate-900 pb-4 mb-5 flex justify-between items-start">
-            <div>
-              <div className="flex items-center space-x-2">
-                <Wrench className="w-6 h-6 text-slate-900 stroke-[2.5]" />
+            <div className="flex items-center space-x-3">
+              <img
+                src="/logo.jpg"
+                alt="MotoParts"
+                className="w-11 h-11 rounded-xl object-cover border border-slate-300 shadow-sm shrink-0"
+              />
+              <div>
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 uppercase">
                   Motor Parts Pricelist (PHP)
                 </h1>
+                <p className="text-xs text-slate-600 mt-0.5">
+                  {printMode === 'both' ? 'Dealer & Shop Internal Pricelist (Philippine Peso)' : 'Official Retail Pricelist (Philippine Peso)'}
+                </p>
               </div>
-              <p className="text-xs text-slate-600 mt-0.5">
-                {printMode === 'both' ? 'Dealer & Shop Internal Pricelist (Philippine Peso)' : 'Official Retail Pricelist (Philippine Peso)'}
-              </p>
             </div>
             <div className="text-right text-xs text-slate-500">
               <div>Date: {new Date().toLocaleDateString('en-PH')}</div>

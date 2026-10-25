@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { CompletedPurchase, CompletedPurchaseItem } from '../types/wholesale';
 import { MotorPart } from '../types/motorPart';
 import { formatPHP } from './formatCurrency';
+import { APP_LOGO_BASE64 } from '../assets/logoBase64';
 
 /**
  * Cleanly format raw numbers as currency for PDF
@@ -34,16 +35,20 @@ export const exportSinglePurchasePdf = (purchase: CompletedPurchase) => {
   doc.setFillColor(245, 158, 11); // amber-500
   doc.rect(0, 28, pageWidth, 2.5, 'F');
 
-  // Header Text
+  // Header Logo & Text
+  try {
+    doc.addImage(APP_LOGO_BASE64, 'JPEG', 12, 4, 20, 20);
+  } catch (e) {}
+
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('MOTOPARTS WHOLESALE', 14, 12);
+  doc.setFontSize(15);
+  doc.text('MOTOPARTS WHOLESALE', 36, 12);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(203, 213, 225); // slate-300
-  doc.text('OFFICIAL WHOLESALE PURCHASE VOUCHER & RECEIPT', 14, 18);
+  doc.text('OFFICIAL WHOLESALE PURCHASE VOUCHER & RECEIPT', 36, 18);
 
   // Order Details Box
   doc.setTextColor(15, 23, 42);
@@ -171,15 +176,19 @@ export const exportAllPurchaseHistoryPdf = (history: CompletedPurchase[]) => {
   doc.rect(0, 28, pageWidth, 2.5, 'F');
 
   // Title
+  try {
+    doc.addImage(APP_LOGO_BASE64, 'JPEG', 12, 4, 20, 20);
+  } catch (e) {}
+
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('MOTOPARTS WHOLESALE', 14, 12);
+  doc.setFontSize(15);
+  doc.text('MOTOPARTS WHOLESALE', 36, 12);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(203, 213, 225);
-  doc.text('COMPLETED WHOLESALE PURCHASES & SALES HISTORY REPORT', 14, 18);
+  doc.text('COMPLETED WHOLESALE PURCHASES & SALES HISTORY REPORT', 36, 18);
 
   const totalOrders = history.length;
   const totalUnits = history.reduce((sum, p) => sum + p.totalUnits, 0);
@@ -350,10 +359,14 @@ export const exportPartsPricelistPdf = (
   doc.rect(0, 28, pageWidth, 2.5, 'F');
 
   // Title
+  try {
+    doc.addImage(APP_LOGO_BASE64, 'JPEG', 12, 4, 20, 20);
+  } catch (e) {}
+
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('MOTOPARTS PRICELIST', 14, 12);
+  doc.setFontSize(15);
+  doc.text('MOTOPARTS PRICELIST', 36, 12);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
@@ -362,7 +375,7 @@ export const exportPartsPricelistPdf = (
     mode === 'both'
       ? 'OFFICIAL DEALER & SHOP INVENTORY PRICELIST (PHILIPPINE PESO)'
       : 'OFFICIAL RETAIL PRICELIST (PHILIPPINE PESO)',
-    14,
+    36,
     18
   );
 
