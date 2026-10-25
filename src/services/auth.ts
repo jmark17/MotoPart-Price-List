@@ -187,127 +187,97 @@ const ensureGoogleGsiLoaded = (): Promise<any> => {
   });
 };
 
-// Google Sign-In: Direct Google Identity Services with Firebase Auth fallback
+// Google Sign-In: Firebase Auth popup with Google Workspace scopes (avoids ORIGIN_MISMATCH)
 export const googleSignIn = async (
   requestWorkspaceScopes = true
 ): Promise<{ user: User | AppUser; accessToken: string } | null> => {
-  // Method 1: Google Identity Services token client (Direct 1P Google Workspace OAuth)
   try {
-    const oauth2 = await ensureGoogleGsiLoaded();
-    const scopesList = [
-      'email',
-      'profile',
-      'openid',
-      ...(requestWorkspaceScopes ? SCOPES : []),
-    ].join(' ');
+    const provider = new GoogleAuthProvider();
+    if (requestWorkspaceScopes) {
+      SCOPES.forEach((s) => provider.addScope(s));
+    }
+    provider.setCustomParameters({ prompt: 'select_account' });
 
-    const tokenResponse: any = await new Promise((resolve, reject) => {
-      try {
-        const client = oauth2.initTokenClient({
-          client_id: firebaseConfig.oAuthClientId,
-          scope: scopesList,
-          prompt: 'select_account',
-          callback: (resp: any) => {
-            if (resp.error) {
-              if (resp.error === 'popup_closed_by_user' || resp.error === 'access_denied') {
-                reject(new Error('Sign-in was cancelled.'));
-              } else {
-                reject(new Error(resp.error_description || resp.error));
-              }
-            } else {
-              resolve(resp);
-            }
-          },
-        });
-        client.requestAccessToken();
-      } catch (e) {
-        reject(e);
-      }
-    });
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const accessToken =
+      credential?.accessToken ||
+      (result as any)._tokenResponse?.oauthAccessToken ||
+      '';
 
-    const accessToken = tokenResponse?.access_token;
-    if (!accessToken) {
-      throw new Error('No access token received from Google.');
+    if (accessToken) {
+      setCachedAccessToken(accessToken);
     }
 
-    setCachedAccessToken(accessToken);
+    notifyAuthListeners(result.user, accessToken);
+    return { user: result.user, accessToken };
+  } catch (error: any) {
+    console.warn('Google sign-in error:', error?.code || error?.message);
 
-    // Fetch user profile from Google UserInfo
-    let googleUser: AppUser = {
-      uid: `google_${Date.now()}`,
-      email: 'user@gmail.com',
-      displayName: 'Google User',
-      photoURL: null,
-      emailVerified: true,
-    };
-
-    try {
-      const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (profileRes.ok) {
-        const profile = await profileRes.json();
-        googleUser = {
-          uid: `google_${profile.sub || Date.now()}`,
-          email: profile.email || 'user@gmail.com',
-          displayName: profile.name || profile.given_name || 'Google User',
-          photoURL: profile.picture || null,
-          emailVerified: profile.email_verified ?? true,
-        };
-      }
-    } catch (profileErr) {
-      console.warn('UserInfo fetch warning (proceeding with token):', profileErr);
+    if (error.code === 'auth/popup-closed-by-user' || error.message?.includes('closed-by-user')) {
+      throw new Error('Kinansela ang pag-sign in sa Google.');
     }
 
-    saveLocalUserSession(googleUser);
-    notifyAuthListeners(googleUser, accessToken);
-
-    return { user: googleUser, accessToken };
-  } catch (gisError: any) {
-    console.warn('Google Identity Services flow note:', gisError?.message);
-
-    if (gisError.message?.includes('cancelled')) {
-      throw gisError;
+    if (error.code === 'auth/popup-blocked') {
+      throw new Error('Hinarang ng browser ang popup. Paki-allow ang popups o gamitin ang Email Login.');
     }
 
-    // Method 2: Firebase Auth Google Popup fallback
-    try {
-      const provider = new GoogleAuthProvider();
-      if (requestWorkspaceScopes) {
-        SCOPES.forEach((s) => provider.addScope(s));
-      }
-      provider.setCustomParameters({ prompt: 'select_account' });
-
-      const result = await signInWithPopup(auth, provider);
-      const credential = GoogleAuthProvider.credentialFromResult(result);
-      const token =
-        credential?.accessToken ||
-        (result as any)._tokenResponse?.oauthAccessToken ||
-        (result as any)._tokenResponse?.idToken ||
-        '';
-
-      if (token) {
-        setCachedAccessToken(token);
-      }
-
-      notifyAuthListeners(result.user, token);
-      return { user: result.user, accessToken: token };
-    } catch (fbError: any) {
-      console.warn('Firebase Google fallback note:', fbError?.code || fbError?.message);
-
-      if (fbError.code === 'auth/popup-blocked') {
-        throw new Error('Sign-in popup was blocked by your browser. Please allow popups or use Email & Password.');
-      }
-      if (fbError.code === 'auth/popup-closed-by-user') {
-        throw new Error('Sign-in was cancelled before completion.');
-      }
-
+    if (error.code === 'auth/unauthorized-domain') {
       throw new Error(
-        gisError.message ||
-          fbError.message ||
-          'Google Sign-In is unavailable in this browser environment. You can sign in using Email & Password or Quick Access below.'
+        `Ang web domain na ito (${window.location.hostname}) ay hindi pa nakarehistro sa Firebase / Google Cloud Console Authorized Domains. Maaari mong gamitin ang Quick Manager Login o Email habang ina-update ang configuration.`
       );
     }
+
+    // Try secondary GIS only if Firebase popup fails with generic error and not origin mismatch
+    if (!error.message?.includes('origin_mismatch') && !error.message?.includes('ORIGIN_MISMATCH')) {
+      try {
+        const oauth2 = await ensureGoogleGsiLoaded();
+        const scopesList = [
+          'email',
+          'profile',
+          'openid',
+          ...(requestWorkspaceScopes ? SCOPES : []),
+        ].join(' ');
+
+        const tokenResponse: any = await new Promise((resolve, reject) => {
+          const client = oauth2.initTokenClient({
+            client_id: firebaseConfig.oAuthClientId,
+            scope: scopesList,
+            prompt: 'select_account',
+            callback: (resp: any) => {
+              if (resp.error) {
+                reject(new Error(resp.error_description || resp.error));
+              } else {
+                resolve(resp);
+              }
+            },
+          });
+          client.requestAccessToken();
+        });
+
+        const token = tokenResponse?.access_token;
+        if (token) {
+          setCachedAccessToken(token);
+          const mockUser: AppUser = {
+            uid: `google_${Date.now()}`,
+            email: 'google-user@motoparts.ph',
+            displayName: 'Google Account User',
+            photoURL: null,
+            emailVerified: true,
+          };
+          saveLocalUserSession(mockUser);
+          notifyAuthListeners(mockUser, token);
+          return { user: mockUser, accessToken: token };
+        }
+      } catch (gisErr: any) {
+        console.warn('GIS fallback also unavailable:', gisErr?.message);
+      }
+    }
+
+    throw new Error(
+      error.message ||
+        'Hindi makakonekta sa Google. Maaari kang mag-sign in gamit ang Quick Manager Login o Email.'
+    );
   }
 };
 
@@ -501,44 +471,29 @@ export const getAccessToken = async (interactive: boolean = false): Promise<stri
   return await requestGoogleAuthorization();
 };
 
-/**
- * Explicitly triggers Google OAuth authorization prompt specifically for Google Sheets integration
- */
 export const requestGoogleAuthorization = async (): Promise<string | null> => {
   try {
-    const oauth2 = await ensureGoogleGsiLoaded();
-    const scopesList = ['email', 'profile', 'openid', ...SCOPES].join(' ');
+    const provider = new GoogleAuthProvider();
+    SCOPES.forEach((s) => provider.addScope(s));
+    provider.setCustomParameters({ prompt: 'select_account' });
 
-    const tokenResponse: any = await new Promise((resolve, reject) => {
-      try {
-        const client = oauth2.initTokenClient({
-          client_id: firebaseConfig.oAuthClientId,
-          scope: scopesList,
-          prompt: 'select_account',
-          callback: (resp: any) => {
-            if (resp.error) {
-              if (resp.error === 'popup_closed_by_user' || resp.error === 'access_denied') {
-                reject(new Error('Google authorization was cancelled.'));
-              } else {
-                reject(new Error(resp.error_description || resp.error));
-              }
-            } else {
-              resolve(resp);
-            }
-          },
-        });
-        client.requestAccessToken();
-      } catch (e) {
-        reject(e);
-      }
-    });
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    const token =
+      credential?.accessToken ||
+      (result as any)._tokenResponse?.oauthAccessToken ||
+      null;
 
-    if (tokenResponse?.access_token) {
-      setCachedAccessToken(tokenResponse.access_token);
-      return tokenResponse.access_token;
+    if (token) {
+      setCachedAccessToken(token);
+      notifyAuthListeners(result.user, token);
+      return token;
     }
   } catch (err: any) {
     console.warn('Google authorization prompt error:', err);
+    if (err.code === 'auth/popup-closed-by-user') {
+      throw new Error('Kinansela ang pag-apruba sa Google.');
+    }
     throw err;
   }
   return null;
