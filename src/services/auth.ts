@@ -431,18 +431,27 @@ export const isGoogleTokenActive = (): boolean => {
 };
 
 /**
- * Retrieves valid Google OAuth access token, attempting silent refresh if expired or interactive prompt if requested
+ * Checks if a token is a genuine Google OAuth 2.0 access token
+ */
+export const isRealGoogleOAuthToken = (token: string | null): boolean => {
+  if (!token) return false;
+  if (token.startsWith('google_token_') || token.startsWith('demo_')) return false;
+  return token.length > 20;
+};
+
+/**
+ * Retrieves valid Google OAuth access token, attempting interactive prompt if requested
  */
 export const getAccessToken = async (interactive: boolean = false): Promise<string | null> => {
-  // 1. Check in-memory token
-  if (cachedAccessToken) {
+  // 1. Check in-memory real token
+  if (isRealGoogleOAuthToken(cachedAccessToken)) {
     return cachedAccessToken;
   }
 
   // 2. Check localStorage/sessionStorage
   try {
     const storedToken = localStorage.getItem(LOCAL_TOKEN_KEY) || sessionStorage.getItem(LOCAL_TOKEN_KEY);
-    if (storedToken) {
+    if (isRealGoogleOAuthToken(storedToken)) {
       cachedAccessToken = storedToken;
       return storedToken;
     }
@@ -457,6 +466,7 @@ export const getAccessToken = async (interactive: boolean = false): Promise<stri
 };
 
 export const requestGoogleAuthorization = async (): Promise<string | null> => {
+  // Method 1: Firebase Auth Google Popup with Google Workspace scopes
   try {
     const provider = new GoogleAuthProvider();
     SCOPES.forEach((s) => provider.addScope(s));
@@ -469,23 +479,51 @@ export const requestGoogleAuthorization = async (): Promise<string | null> => {
       (result as any)._tokenResponse?.oauthAccessToken ||
       null;
 
-    if (token) {
+    if (token && isRealGoogleOAuthToken(token)) {
       setCachedAccessToken(token);
       notifyAuthListeners(result.user, token);
       return token;
     }
   } catch (err: any) {
-    console.warn('Google authorization error:', err);
+    console.warn('Firebase popup authorization note:', err?.code || err?.message);
     if (err.code === 'auth/popup-closed-by-user') {
       throw new Error('Kinansela ang pag-apruba sa Google.');
     }
-    // If environment restricted, return active or cached token
-    if (cachedAccessToken) return cachedAccessToken;
-    const fallbackToken = `google_token_${Date.now()}`;
-    setCachedAccessToken(fallbackToken);
-    return fallbackToken;
   }
-  return cachedAccessToken || null;
+
+  // Method 2: Google Identity Services token client
+  try {
+    const oauth2 = await ensureGoogleGsiLoaded();
+    const scopesList = ['email', 'profile', 'openid', ...SCOPES].join(' ');
+
+    const tokenResponse: any = await new Promise((resolve, reject) => {
+      const client = oauth2.initTokenClient({
+        client_id: firebaseConfig.oAuthClientId,
+        scope: scopesList,
+        prompt: 'select_account',
+        callback: (resp: any) => {
+          if (resp.error) reject(new Error(resp.error_description || resp.error));
+          else resolve(resp);
+        },
+      });
+      client.requestAccessToken();
+    });
+
+    const token = tokenResponse?.access_token;
+    if (token && isRealGoogleOAuthToken(token)) {
+      setCachedAccessToken(token);
+      return token;
+    }
+  } catch (gisErr: any) {
+    console.warn('GIS authorization note:', gisErr?.message);
+    if (gisErr.message?.includes('closed') || gisErr.message?.includes('cancelled')) {
+      throw gisErr;
+    }
+  }
+
+  throw new Error(
+    'Kailangan ng Google Authorization upang gumawa at mag-sync ng Google Sheets. Paki-pindot ang Continue with Google at payagan ang Google Sheets access.'
+  );
 };
 
 export const logout = async () => {

@@ -84,88 +84,67 @@ export async function createMotorPartsSpreadsheet(
   accessToken: string,
   title: string = 'Motor Parts Pricelist Database (PHP)',
   initialParts: MotorPart[] = []
-): Promise<{ id: string; url: string; title: string; sheetTitle: string; isTemplateReady?: boolean }> {
+): Promise<{ id: string; url: string; title: string; sheetTitle: string }> {
   const sheetTitle = 'Pricelist';
 
-  // 1. If valid OAuth token exists, try official Google Sheets API
-  if (accessToken && !accessToken.startsWith('google_token_') && !accessToken.startsWith('demo_')) {
-    try {
-      const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
+  if (!accessToken || accessToken.startsWith('google_token_') || accessToken.startsWith('demo_')) {
+    throw new Error('Kailangan ng Google Authorization upang gumawa ng spreadsheet sa Google Drive.');
+  }
+
+  const createRes = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      properties: { title },
+      sheets: [
+        {
+          properties: {
+            title: sheetTitle,
+            gridProperties: { frozenRowCount: 1 },
+          },
         },
-        body: JSON.stringify({
-          properties: { title },
-          sheets: [
-            {
-              properties: {
-                title: sheetTitle,
-                gridProperties: { frozenRowCount: 1 },
-              },
-            },
-          ],
-        }),
-      });
+      ],
+    }),
+  });
 
-      if (createRes.ok) {
-        const created = await createRes.json();
-        const spreadsheetId = created.spreadsheetId;
-        const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
-
-        const rows = [
-          SHEET_HEADERS,
-          ...initialParts.map((p) => [
-            p.partNumber,
-            p.itemName,
-            p.brand,
-            p.srpPrice,
-            p.shopPrice,
-          ]),
-        ];
-
-        await updateSpreadsheetValues(accessToken, spreadsheetId, sheetTitle, rows);
-        return {
-          id: spreadsheetId,
-          url: spreadsheetUrl,
-          title,
-          sheetTitle,
-        };
-      }
-    } catch (err) {
-      console.warn('Google Sheets API direct creation note (using resilient connector):', err);
+  if (!createRes.ok) {
+    const errorBody = await createRes.json().catch(() => ({}));
+    if (createRes.status === 401) {
+      throw new Error('Google authorization expired (HTTP 401). Please re-authenticate with Google.');
     }
+    if (createRes.status === 403) {
+      throw new Error('Google Drive/Sheets permission denied (HTTP 403). Please authorize Google Sheets access.');
+    }
+    throw new Error(
+      errorBody.error?.message || `Failed to create Google Sheet (HTTP ${createRes.status})`
+    );
   }
 
-  // 2. Resilient Google Sheet Connector:
-  // Automatically creates a connected Google Sheet workspace with all parts formatted
-  const generatedId = `motoparts_${Date.now().toString(36)}`;
-  const spreadsheetUrl = 'https://sheets.new';
+  const created = await createRes.json();
+  const spreadsheetId = created.spreadsheetId;
+  const spreadsheetUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
 
-  // Save the full spreadsheet data locally
-  try {
-    const rows = [
-      SHEET_HEADERS,
-      ...initialParts.map((p) => [
-        p.partNumber,
-        p.itemName,
-        p.brand,
-        p.srpPrice,
-        p.shopPrice,
-      ]),
-    ];
-    localStorage.setItem(`motoparts_sheet_${generatedId}`, JSON.stringify(rows));
-  } catch (e) {
-    console.warn(e);
-  }
+  const rows = [
+    SHEET_HEADERS,
+    ...initialParts.map((p) => [
+      p.partNumber,
+      p.itemName,
+      p.brand,
+      p.srpPrice,
+      p.shopPrice,
+    ]),
+  ];
+
+  await updateSpreadsheetValues(accessToken, spreadsheetId, sheetTitle, rows);
 
   return {
-    id: generatedId,
+    id: spreadsheetId,
     url: spreadsheetUrl,
-    title,
+    title: created.properties?.title || title,
     sheetTitle,
-    isTemplateReady: true,
   };
 }
 
@@ -177,61 +156,67 @@ export async function updateSpreadsheetValues(
 ): Promise<void> {
   const safeSheet = sheetName.replace(/'/g, "''");
 
-  // Save latest values in local cache for resilience
+  if (!accessToken || accessToken.startsWith('google_token_') || accessToken.startsWith('demo_')) {
+    throw new Error('Kailangan ng Google Authorization upang mag-update ng Google Sheet.');
+  }
+
+  // 1. Clear existing cells in sheet first
   try {
-    localStorage.setItem(`motoparts_sheet_data_${spreadsheetId}`, JSON.stringify(rows));
-  } catch (e) {}
-
-  // Only call Google Sheets API if real OAuth token
-  if (accessToken && !accessToken.startsWith('google_token_') && !accessToken.startsWith('demo_')) {
-    try {
-      // 1. Clear existing cells
-      await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            ranges: [`'${safeSheet}'!A1:Z5000`],
-          }),
-        }
-      ).catch(() => {});
-
-      // 2. Write new rows using values:batchUpdate
-      const colCount = Math.max(1, rows[0]?.length || 5);
-      const colLetter = String.fromCharCode(65 + colCount - 1);
-      const targetRange = `'${safeSheet}'!A1:${colLetter}${rows.length}`;
-
-      const res = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            valueInputOption: 'USER_ENTERED',
-            data: [
-              {
-                range: targetRange,
-                majorDimension: 'ROWS',
-                values: rows,
-              },
-            ],
-          }),
-        }
-      );
-
-      if (!res.ok && res.status !== 401) {
-        console.warn(`Spreadsheet batchUpdate status ${res.status}`);
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchClear`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ranges: [`'${safeSheet}'!A1:Z5000`],
+        }),
       }
-    } catch (err: any) {
-      console.warn('Google Sheets batchUpdate notice:', err?.message);
+    );
+  } catch (clearErr) {}
+
+  // 2. Write new rows using values:batchUpdate
+  const colCount = Math.max(1, rows[0]?.length || 5);
+  const colLetter = String.fromCharCode(65 + colCount - 1);
+  const targetRange = `'${safeSheet}'!A1:${colLetter}${rows.length}`;
+
+  const res = await fetch(
+    `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        valueInputOption: 'USER_ENTERED',
+        data: [
+          {
+            range: targetRange,
+            majorDimension: 'ROWS',
+            values: rows,
+          },
+        ],
+      }),
     }
+  );
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      throw new Error('Google authorization expired (HTTP 401). Please re-authenticate with Google.');
+    }
+    if (res.status === 403) {
+      throw new Error('Permission denied (HTTP 403). Make sure your Google account has edit access to this spreadsheet.');
+    }
+    if (res.status === 404) {
+      throw new Error('Spreadsheet not found (HTTP 404). Verify your Google Sheet ID.');
+    }
+    throw new Error(
+      errorBody.error?.message || `Failed to update spreadsheet values (HTTP ${res.status})`
+    );
   }
 }
 

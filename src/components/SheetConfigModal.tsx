@@ -180,6 +180,32 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
                 </div>
               </div>
 
+              {/* Alert if dummy/draft ID is connected from previous tests */}
+              {syncStatus.spreadsheetId?.startsWith('motoparts_') && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-2">
+                  <div className="text-xs text-amber-300 font-medium">
+                    ⚠️ Lokal na draft sheet ang nakakabit. Pindutin ang button sa ibaba upang gumawa ng <strong>Tunay na Google Sheet sa iyong Google Drive</strong> o ikonekta ang sarili mong Google Sheet link.
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={onCreateNewSheet}
+                      disabled={syncStatus.isSyncing}
+                      className="flex-1 py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded-lg text-xs transition cursor-pointer shadow"
+                    >
+                      {syncStatus.isSyncing ? 'Ginagawa ang Google Sheet...' : 'Gumawa ng Tunay na Google Sheet sa Google Drive'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onDisconnectSheet}
+                      className="py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition"
+                    >
+                      Palitan
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Auto Sync Toggle */}
               <div className="flex items-center justify-between p-3 bg-slate-950/60 rounded-xl border border-slate-800">
                 <div>

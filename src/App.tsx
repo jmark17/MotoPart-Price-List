@@ -5,16 +5,20 @@ import {
   logout,
   getAccessToken,
   setCachedAccessToken,
+  requestGoogleAuthorization,
+  isRealGoogleOAuthToken,
   AppUser,
 } from './services/auth';
 import {
   createMotorPartsSpreadsheet,
+  updateSpreadsheetValues,
   syncAllPartsToSheet,
   readPartsFromSheet,
   fetchSpreadsheetMetadata,
   extractSpreadsheetId,
   copyPartsToClipboardForSheets,
   downloadPartsCsv,
+  SHEET_HEADERS,
 } from './services/sheetsService';
 import { INITIAL_MOTOR_PARTS } from './data/initialParts';
 import { MotorPart, SheetSyncStatus } from './types/motorPart';
@@ -275,16 +279,20 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Trigger Google Sheet sync
+  // Trigger Google Sheet sync (Auto-sync)
   const triggerSheetSync = async (
     targetParts: MotorPart[],
     overrideSheetId?: string,
     showToastMessage: boolean = true
   ) => {
     const targetId = overrideSheetId || syncStatus.spreadsheetId;
-    if (!targetId) return;
+    if (!targetId || targetId.startsWith('motoparts_')) return;
 
-    let token = (await getAccessToken(false)) || `google_token_${Date.now()}`;
+    const token = await getAccessToken(false);
+    if (!token || !isRealGoogleOAuthToken(token)) {
+      return;
+    }
+
     setSyncStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
 
     try {
@@ -300,17 +308,12 @@ export default function App() {
         showToast(`Google Sheet updated (${targetParts.length} parts synchronized in PHP)`);
       }
     } catch (err: any) {
-      console.warn('Sync notice (saved locally):', err?.message);
-      const now = new Date().toISOString();
+      console.warn('Auto-sync notice:', err?.message);
       setSyncStatus((prev) => ({
         ...prev,
         isSyncing: false,
-        lastSyncedAt: now,
-        error: null,
+        error: err.message || 'Auto-sync failed',
       }));
-      if (showToastMessage) {
-        showToast(`Catalog saved! Ready to push to Google Sheet.`);
-      }
     }
   };
 
@@ -319,21 +322,31 @@ export default function App() {
     try {
       await logout();
       setUser(null);
-      showToast('Signed out of Firebase account', 'info');
+      showToast('Signed out of account', 'info');
     } catch (err) {
       console.error('Error during logout', err);
     }
   };
 
-  // Create brand new Google Sheet (100% Resilient - never crashes with 401)
+  // Create REAL brand new Google Sheet in Google Drive
   const handleCreateNewSheet = async () => {
-    let token = (await getAccessToken(false)) || `google_token_${Date.now()}`;
-
     setSyncStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
     try {
+      // 1. Ensure valid real Google OAuth token (prompts user if needed)
+      let token = await getAccessToken(true);
+      if (!token || !isRealGoogleOAuthToken(token)) {
+        token = await requestGoogleAuthorization();
+      }
+      if (!token || !isRealGoogleOAuthToken(token)) {
+        throw new Error('Kailangan ng Google Authorization upang gumawa ng bagong Google Sheet sa iyong Google Drive.');
+      }
+
+      showToast('Gumagawa ng bagong Google Sheet sa iyong Google Drive...', 'info');
+
+      // 2. Call real Google Sheets API
       const created = await createMotorPartsSpreadsheet(
         token,
-        'Motor Parts Pricelist Database (PHP)',
+        'MotoParts Pricelist Database (PHP)',
         parts
       );
 
@@ -351,26 +364,63 @@ export default function App() {
         error: null,
       });
 
-      // Automatically copy formatted table to clipboard
+      // Also copy to clipboard for convenience
       await copyPartsToClipboardForSheets(parts).catch(() => {});
-      showToast(`Connected Google Sheet: "${created.title}"! All items formatted and ready.`);
+      showToast(`Tagumpay na nagawa ang Google Sheet: "${created.title}"! (${parts.length} piyesa ang nailagay)`);
     } catch (err: any) {
-      console.warn('Create sheet error notice:', err);
-      const localId = `motoparts_${Date.now().toString(36)}`;
-      localStorage.setItem(STORAGE_SHEET_ID_KEY, localId);
-      localStorage.setItem(STORAGE_SHEET_TITLE_KEY, 'Motor Parts Pricelist (PHP)');
-      setSyncStatus({
-        isConnected: true,
-        spreadsheetId: localId,
-        spreadsheetUrl: 'https://sheets.new',
-        spreadsheetTitle: 'Motor Parts Pricelist (PHP)',
-        lastSyncedAt: new Date().toISOString(),
+      console.error('Create sheet error:', err);
+      setSyncStatus((prev) => ({
+        ...prev,
         isSyncing: false,
-        autoSync: true,
+        error: err.message || 'Failed to create Google Sheet',
+      }));
+      showToast(err.message || 'Hindi nagawa ang Google Sheet. Paki-check ang Google authorization.', 'error');
+    }
+  };
+
+  // Manual Push Items to Google Sheet
+  const handlePushToSheet = async () => {
+    if (!syncStatus.spreadsheetId) return;
+
+    setSyncStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
+    try {
+      let token = await getAccessToken(true);
+      if (!token || !isRealGoogleOAuthToken(token)) {
+        token = await requestGoogleAuthorization();
+      }
+      if (!token || !isRealGoogleOAuthToken(token)) {
+        throw new Error('Kailangan ng Google Authorization upang mag-push ng data sa Google Sheet.');
+      }
+
+      const rows = [
+        SHEET_HEADERS,
+        ...parts.map((p) => [
+          p.partNumber,
+          p.itemName,
+          p.brand,
+          p.srpPrice,
+          p.shopPrice,
+        ]),
+      ];
+
+      showToast(`Pina-push ang ${parts.length} items sa Google Sheet...`, 'info');
+      await updateSpreadsheetValues(token, syncStatus.spreadsheetId, 'Pricelist', rows);
+      const now = new Date().toISOString();
+      setSyncStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        lastSyncedAt: now,
         error: null,
-      });
-      await copyPartsToClipboardForSheets(parts).catch(() => {});
-      showToast('Connected Google Sheet! Data copied to clipboard ready for Google Sheets.');
+      }));
+      showToast(`Matagumpay na na-update ang Google Sheet (${parts.length} items na-push)!`);
+    } catch (err: any) {
+      console.error('Push items error:', err);
+      setSyncStatus((prev) => ({
+        ...prev,
+        isSyncing: false,
+        error: err.message || 'Failed to push to Google Sheet',
+      }));
+      showToast(err.message || 'Hindi nai-push ang items sa Google Sheet.', 'error');
     }
   };
 
@@ -382,59 +432,58 @@ export default function App() {
       return;
     }
 
-    let token = (await getAccessToken(false)) || `google_token_${Date.now()}`;
     setSyncStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
 
     try {
-      const meta = await fetchSpreadsheetMetadata(token, sheetId);
+      const token = await getAccessToken(false);
+      let sheetTitle = 'Motor Parts Sheet';
 
-      // Try pulling existing parts from the sheet if available
+      // 1. Try reading metadata if token is available
       try {
-        const result = await readPartsFromSheet(token, sheetId);
-        if (result.parts && result.parts.length > 0) {
+        if (token && isRealGoogleOAuthToken(token)) {
+          const meta = await fetchSpreadsheetMetadata(token, sheetId);
+          sheetTitle = meta.title;
+        }
+      } catch (e) {}
+
+      // 2. Try importing parts from sheet immediately
+      try {
+        const result = await readPartsFromSheet(token || '', sheetId);
+        if (result.parts.length > 0) {
           const normalized = result.parts.map((p) => ({
             ...p,
             brand: (p.brand || '').toUpperCase(),
           }));
           setParts(normalized);
-          showToast(`Imported ${normalized.length} parts from Google Sheet!`);
-        } else {
-          await syncAllPartsToSheet(token, sheetId, parts);
+          sheetTitle = result.sheetTitle || sheetTitle;
+          showToast(`Naikonekta at na-import ang ${normalized.length} piyesa mula sa Google Sheet!`);
         }
-      } catch (pullErr) {
-        await syncAllPartsToSheet(token, sheetId, parts).catch(() => {});
+      } catch (readErr) {
+        console.warn('Read note during connect:', readErr);
       }
 
       localStorage.setItem(STORAGE_SHEET_ID_KEY, sheetId);
-      localStorage.setItem(STORAGE_SHEET_TITLE_KEY, meta.title);
+      localStorage.setItem(STORAGE_SHEET_TITLE_KEY, sheetTitle);
 
       setSyncStatus({
         isConnected: true,
         spreadsheetId: sheetId,
         spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`,
-        spreadsheetTitle: meta.title,
+        spreadsheetTitle: sheetTitle,
         lastSyncedAt: new Date().toISOString(),
         isSyncing: false,
         autoSync: true,
         error: null,
       });
 
-      showToast(`Connected to Google Sheet: "${meta.title}"`);
+      showToast(`Naikonekta ang Google Sheet: "${sheetTitle}"`);
     } catch (err: any) {
-      console.warn('Connect sheet notice:', err);
-      localStorage.setItem(STORAGE_SHEET_ID_KEY, sheetId);
-      localStorage.setItem(STORAGE_SHEET_TITLE_KEY, 'Connected Google Sheet');
-      setSyncStatus({
-        isConnected: true,
-        spreadsheetId: sheetId,
-        spreadsheetUrl: `https://docs.google.com/spreadsheets/d/${sheetId}/edit`,
-        spreadsheetTitle: 'Connected Google Sheet',
-        lastSyncedAt: new Date().toISOString(),
+      setSyncStatus((prev) => ({
+        ...prev,
         isSyncing: false,
-        autoSync: true,
-        error: null,
-      });
-      showToast('Connected to Google Sheet!');
+        error: err.message || 'Failed to connect Google Sheet',
+      }));
+      showToast(err.message || 'Failed to connect Google Sheet', 'error');
     }
   };
 
@@ -452,28 +501,47 @@ export default function App() {
       autoSync: true,
       error: null,
     });
-    showToast('Google Sheet disconnected from app', 'info');
+    showToast('Nadiskonekta ang Google Sheet', 'info');
   };
 
   // Pull / Import data from Google Sheet
   const handlePullFromSheet = async () => {
     if (!syncStatus.spreadsheetId) return;
 
-    let token = (await getAccessToken(false)) || `google_token_${Date.now()}`;
     setSyncStatus((prev) => ({ ...prev, isSyncing: true, error: null }));
 
     try {
-      const { parts: sheetParts } = await readPartsFromSheet(token, syncStatus.spreadsheetId);
-      if (sheetParts.length > 0) {
-        const normalized = sheetParts.map((p) => ({
+      let token = await getAccessToken(false);
+      let result: { parts: MotorPart[]; sheetTitle: string };
+
+      try {
+        result = await readPartsFromSheet(token || '', syncStatus.spreadsheetId);
+      } catch (firstErr: any) {
+        // If unauthorized or permission denied, request Google authorization interactively
+        if (
+          firstErr.message?.includes('401') ||
+          firstErr.message?.includes('authorization') ||
+          firstErr.message?.includes('denied') ||
+          firstErr.message?.includes('Unable to read')
+        ) {
+          token = await requestGoogleAuthorization();
+          result = await readPartsFromSheet(token || '', syncStatus.spreadsheetId);
+        } else {
+          throw firstErr;
+        }
+      }
+
+      if (result.parts.length > 0) {
+        const normalized = result.parts.map((p) => ({
           ...p,
           brand: (p.brand || '').toUpperCase(),
         }));
         setParts(normalized);
-        showToast(`Imported ${sheetParts.length} items from Google Sheet`);
+        showToast(`Na-import ang ${normalized.length} piyesa mula sa "${result.sheetTitle}"!`);
       } else {
-        showToast('Google Sheet is ready for your parts catalog.', 'info');
+        showToast('Walang nakitang data rows sa Google Sheet.', 'info');
       }
+
       setSyncStatus((prev) => ({
         ...prev,
         isSyncing: false,
@@ -481,13 +549,13 @@ export default function App() {
         error: null,
       }));
     } catch (err: any) {
-      console.warn('Pull sheet notice:', err);
+      console.error('Pull sheet error:', err);
       setSyncStatus((prev) => ({
         ...prev,
         isSyncing: false,
-        error: null,
+        error: err.message || 'Failed to pull from Google Sheet',
       }));
-      showToast('Google Sheet synchronized and active', 'info');
+      showToast(err.message || 'Hindi mabasa ang Google Sheet.', 'error');
     }
   };
 
@@ -766,7 +834,7 @@ export default function App() {
         onConnectExistingSheet={handleConnectExistingSheet}
         onDisconnectSheet={handleDisconnectSheet}
         onPullFromSheet={handlePullFromSheet}
-        onPushToSheet={() => triggerSheetSync(parts)}
+        onPushToSheet={handlePushToSheet}
         onToggleAutoSync={() =>
           setSyncStatus((prev) => {
             const next = !prev.autoSync;
