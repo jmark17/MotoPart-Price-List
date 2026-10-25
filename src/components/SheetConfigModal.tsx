@@ -12,7 +12,9 @@ import {
   UploadCloud,
   AlertCircle,
 } from 'lucide-react';
-import { SheetSyncStatus } from '../types/motorPart';
+import { MotorPart, SheetSyncStatus } from '../types/motorPart';
+import { copyPartsToClipboardForSheets, downloadPartsCsv } from '../services/sheetsService';
+import { Copy, Check, Download } from 'lucide-react';
 
 interface SheetConfigModalProps {
   isOpen: boolean;
@@ -28,6 +30,7 @@ interface SheetConfigModalProps {
   onPushToSheet: () => void;
   onToggleAutoSync: () => void;
   totalParts: number;
+  parts?: MotorPart[];
 }
 
 export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
@@ -44,11 +47,25 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
   onPushToSheet,
   onToggleAutoSync,
   totalParts,
+  parts = [],
 }) => {
   const [inputSheetUrlOrId, setInputSheetUrlOrId] = useState('');
-  const [activeTab, setActiveTab] = useState<'create' | 'connect'>('create');
+  const [activeTab, setActiveTab] = useState<'create' | 'connect' | 'tools'>('create');
+  const [copiedTsv, setCopiedTsv] = useState(false);
 
   if (!isOpen) return null;
+
+  const handleCopyTsv = async () => {
+    const ok = await copyPartsToClipboardForSheets(parts);
+    if (ok) {
+      setCopiedTsv(true);
+      setTimeout(() => setCopiedTsv(false), 3000);
+    }
+  };
+
+  const handleDownloadCsv = () => {
+    downloadPartsCsv(parts);
+  };
 
   const handleConnect = (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,6 +225,28 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
                 </button>
               </div>
 
+              {/* Instant Tools in connected state */}
+              <div className="pt-2 border-t border-slate-800 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyTsv}
+                  className="flex-1 flex items-center justify-center space-x-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl text-xs font-medium transition cursor-pointer"
+                >
+                  {copiedTsv ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedTsv ? 'Copied to Clipboard!' : 'Copy Formatted for Sheets'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadCsv}
+                  className="flex items-center justify-center space-x-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 rounded-xl text-xs font-medium transition cursor-pointer"
+                  title="Download as CSV file"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>.CSV</span>
+                </button>
+              </div>
+
               {/* Disconnect Sheet */}
               <div className="pt-2 text-center">
                 <button
@@ -242,13 +281,23 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
                 >
                   Connect Existing Sheet
                 </button>
+                <button
+                  onClick={() => setActiveTab('tools')}
+                  className={`pb-2 px-3 sm:px-4 transition ${
+                    activeTab === 'tools'
+                      ? 'border-b-2 border-amber-500 text-amber-400'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Instant Tools
+                </button>
               </div>
 
               {activeTab === 'create' ? (
                 <div className="space-y-3">
                   <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-2">
                     <p>
-                      We will create a formatted spreadsheet in your Google Drive with columns:
+                      Maglilikha at magkokonekta ng bagong formatted spreadsheet para sa iyong motor parts catalog:
                     </p>
                     <div className="flex flex-wrap gap-1 text-[10px] font-mono">
                       <span className="bg-slate-800 px-1.5 py-0.5 rounded text-amber-300">Part #</span>
@@ -262,15 +311,19 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
                   <button
                     onClick={onCreateNewSheet}
                     disabled={syncStatus.isSyncing}
-                    className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition"
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-600/20 transition cursor-pointer"
                   >
                     <PlusCircle className="w-4 h-4" />
                     <span>
-                      {syncStatus.isSyncing ? 'Creating Spreadsheet...' : 'Create & Connect Motor Parts Sheet'}
+                      {syncStatus.isSyncing ? 'Connecting...' : 'Create & Connect Motor Parts Sheet'}
                     </span>
                   </button>
+
+                  <div className="text-[11px] text-slate-400 text-center">
+                    Awtomatikong magkokonekta at handa nang i-sync sa Google Drive / Google Sheets.
+                  </div>
                 </div>
-              ) : (
+              ) : activeTab === 'connect' ? (
                 <form onSubmit={handleConnect} className="space-y-3">
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
@@ -283,12 +336,15 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
                       placeholder="Paste https://docs.google.com/spreadsheets/d/... or ID"
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-base sm:text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500 font-mono"
                     />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Tip: Maaari mong i-paste ang kahit anong Google Sheet link. Para sa agarang pag-sync nang walang permission warning, itakda ang share sa &quot;Anyone with the link can view&quot;.
+                    </p>
                   </div>
 
                   <button
                     type="submit"
                     disabled={syncStatus.isSyncing || !inputSheetUrlOrId.trim()}
-                    className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-50"
+                    className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-50 cursor-pointer"
                   >
                     <LinkIcon className="w-4 h-4" />
                     <span>
@@ -296,6 +352,46 @@ export const SheetConfigModal: React.FC<SheetConfigModalProps> = ({
                     </span>
                   </button>
                 </form>
+              ) : (
+                /* Instant Tools Tab */
+                <div className="space-y-3">
+                  <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-300 space-y-1.5">
+                    <p className="font-semibold text-white">Instant Export &amp; Google Tools</p>
+                    <p className="text-slate-400 text-[11px]">
+                      Kopyahin ang lahat ng piyesa at presyo diretso sa iyong clipboard o mag-download ng file na handang buksan sa Google Sheets.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyTsv}
+                      className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 bg-slate-800 hover:bg-slate-750 text-white border border-slate-700 hover:border-amber-500/50 rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      {copiedTsv ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-amber-400" />}
+                      <span>{copiedTsv ? 'Copied! Ready to Paste in Google Sheets (Ctrl+V)' : 'Copy All Parts for Google Sheets (Ctrl+V)'}</span>
+                    </button>
+
+                    <a
+                      href="https://sheets.new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>Open New Google Sheet (sheets.new)</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadCsv}
+                      className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 bg-slate-850 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-medium transition cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 text-sky-400" />
+                      <span>Download .CSV File for Excel / Google Sheets</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )}
